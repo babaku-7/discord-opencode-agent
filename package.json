@@ -1,0 +1,33 @@
+{
+  "name": "discord-opencode-agent",
+  "version": "1.0.0",
+  "description": "A Node.js 22+ TypeScript Discord bot that acts as a controlled frontend for an OpenCode coding agent.",
+  "main": "src/index.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "typescript",
+    "opencode"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@opencode-ai/sdk": "^1.18.18",
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.12",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": "22.x"
+  }
+}
