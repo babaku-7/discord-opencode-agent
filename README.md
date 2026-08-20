@@ -37,7 +37,7 @@ The agent can work with multiple AI models through OpenCode, currently supportin
                                   │ !code <task>
                                   ▼
                     ┌─────────────────────────┐
-                    │ Discord OpenCode Agent │
+                    │ Discord OpenCode Agent  │
                     │                         │
                     │ Command Router          │
                     │ Session Manager         │
