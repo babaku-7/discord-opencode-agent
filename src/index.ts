@@ -8,11 +8,23 @@ import {
 
 import { OpenCodeClient } from './opencode/client.js';
 
-const DISCORD_BOT_TOKEN =
-  process.env['DISCORD_BOT_TOKEN'];
+const DISCORD_BOT_TOKEN = process.env['DISCORD_BOT_TOKEN'];
 
 if (!DISCORD_BOT_TOKEN) {
   throw new Error('DISCORD_BOT_TOKEN is required');
+}
+
+const allowedUsers = new Set(
+  (process.env['ALLOWED_USER_IDS'] ?? '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean),
+);
+
+if (allowedUsers.size === 0) {
+  throw new Error(
+    'ALLOWED_USER_IDS is required. Add at least one Discord user ID.',
+  );
 }
 
 const client = new Client({
@@ -28,8 +40,16 @@ const openCode = new OpenCodeClient();
 const sessions = new Map<string, string>();
 const running = new Set<string>();
 
+function isAuthorized(message: Message): boolean {
+  return allowedUsers.has(message.author.id);
+}
+
 function getSessionKey(message: Message): string {
-  return `${message.guildId ?? 'dm'}:${message.channelId}:${message.author.id}`;
+  return [
+    message.guildId ?? 'dm',
+    message.channelId,
+    message.author.id,
+  ].join(':');
 }
 
 function extractText(data: unknown): string {
@@ -84,12 +104,12 @@ async function sendLongMessage(
 
   const limit = 1900;
 
-  for (let i = 0; i < text.length; i += limit) {
-    await channel.send(text.slice(i, i + limit));
+  for (let offset = 0; offset < text.length; offset += limit) {
+    await channel.send(text.slice(offset, offset + limit));
   }
 }
 
-async function handleCode(
+async function handleCodeCommand(
   message: Message,
   prompt: string,
 ): Promise<void> {
@@ -102,7 +122,7 @@ async function handleCode(
 
   if (running.has(key)) {
     await channel.send(
-      '⏳ Task masih berjalan. Gunakan `!abort` untuk menghentikannya.',
+      '⏳ Task sebelumnya masih berjalan. Gunakan `!abort`.',
     );
     return;
   }
@@ -115,6 +135,10 @@ async function handleCode(
     let sessionId = sessions.get(key);
 
     if (!sessionId) {
+      console.log(
+        `[OpenCode] Creating session for ${message.author.tag}`,
+      );
+
       const result = await openCode.createSession(
         `Discord - ${message.author.username}`,
       );
@@ -122,7 +146,9 @@ async function handleCode(
       sessionId = result.data?.id;
 
       if (!sessionId) {
-        throw new Error('OpenCode tidak mengembalikan session ID');
+        throw new Error(
+          'OpenCode tidak mengembalikan session ID.',
+        );
       }
 
       sessions.set(key, sessionId);
@@ -130,7 +156,9 @@ async function handleCode(
       console.log(`[OpenCode] Session: ${sessionId}`);
     }
 
-    console.log(`[OpenCode] Task: ${prompt}`);
+    console.log(
+      `[OpenCode] ${message.author.tag}: ${prompt}`,
+    );
 
     const result = await openCode.sendPrompt(
       sessionId,
@@ -141,7 +169,7 @@ async function handleCode(
 
     if (!text) {
       await channel.send(
-        '⚠️ OpenCode selesai tetapi tidak menghasilkan teks.',
+        '⚠️ OpenCode selesai tetapi tidak menghasilkan output teks.',
       );
       return;
     }
@@ -156,14 +184,17 @@ async function handleCode(
         : String(error);
 
     await channel.send(
-      `❌ Error:\n\`\`\`\n${errorMessage.slice(0, 1800)}\n\`\`\``,
+      `❌ OpenCode error:\n\`\`\`\n${errorMessage.slice(
+        0,
+        1800,
+      )}\n\`\`\``,
     );
   } finally {
     running.delete(key);
   }
 }
 
-async function handleStatus(
+async function handleStatusCommand(
   message: Message,
 ): Promise<void> {
   const key = getSessionKey(message);
@@ -182,7 +213,7 @@ async function handleStatus(
   );
 }
 
-async function handleReset(
+async function handleResetCommand(
   message: Message,
 ): Promise<void> {
   const key = getSessionKey(message);
@@ -191,11 +222,11 @@ async function handleReset(
   running.delete(key);
 
   await message.reply(
-    '🧹 Session di-reset. Request berikutnya akan membuat session baru.',
+    '🧹 Session di-reset. Request berikutnya akan menggunakan session baru.',
   );
 }
 
-async function handleAbort(
+async function handleAbortCommand(
   message: Message,
 ): Promise<void> {
   const key = getSessionKey(message);
@@ -208,32 +239,33 @@ async function handleAbort(
 
   try {
     await openCode.abortSession(sessionId);
+
     running.delete(key);
 
     await message.reply(
-      '🛑 OpenCode session dihentikan.',
+      '🛑 Request OpenCode dihentikan.',
     );
   } catch (error) {
     console.error('[Abort Error]', error);
 
     await message.reply(
-      '❌ Gagal menghentikan session.',
+      '❌ Gagal menghentikan request OpenCode.',
     );
   }
 }
 
-async function handleHelp(
+async function handleHelpCommand(
   message: Message,
 ): Promise<void> {
   await message.reply(
     [
       '**Discord OpenCode Agent**',
       '',
-      '`!code <task>` — kirim task ke AI',
+      '`!code <task>` — kirim task ke agent',
       '`!status` — status session',
       '`!reset` — reset session',
       '`!abort` — hentikan task',
-      '`!help` — bantuan',
+      '`!help` — tampilkan bantuan',
     ].join('\n'),
   );
 }
@@ -244,67 +276,90 @@ client.once('ready', () => {
   );
 
   console.log(
-    `[OpenCode] ${process.env['OPENCODE_URL'] || 'http://127.0.0.1:4096'}`,
+    `[OpenCode] ${
+      process.env['OPENCODE_URL'] ||
+      'http://127.0.0.1:4096'
+    }`,
   );
 
   console.log(
     `[Workspace] ${openCode.getWorkspace()}`,
   );
 
+  console.log(
+    `[Security] ${allowedUsers.size} authorized user(s)`,
+  );
+
   console.log('[Agent] Ready.');
 });
 
 client.on('messageCreate', async (message) => {
-  if (message.author.bot) {
-    return;
-  }
+  try {
+    if (message.author.bot) {
+      return;
+    }
 
-  const content = message.content.trim();
+    if (!message.content.startsWith('!')) {
+      return;
+    }
 
-  if (!content.startsWith('!')) {
-    return;
-  }
+    if (!isAuthorized(message)) {
+      await message.reply(
+        '⛔ Kamu tidak memiliki izin menggunakan coding agent.',
+      );
+      return;
+    }
 
-  const space = content.indexOf(' ');
+    const content = message.content.trim();
+    const spaceIndex = content.indexOf(' ');
 
-  const command = (
-    space === -1
-      ? content.slice(1)
-      : content.slice(1, space)
-  ).toLowerCase();
+    const command = (
+      spaceIndex === -1
+        ? content.slice(1)
+        : content.slice(1, spaceIndex)
+    ).toLowerCase();
 
-  const args =
-    space === -1
-      ? ''
-      : content.slice(space + 1).trim();
+    const args =
+      spaceIndex === -1
+        ? ''
+        : content.slice(spaceIndex + 1).trim();
 
-  switch (command) {
-    case 'code':
-      if (!args) {
-        await message.reply(
-          'Gunakan: `!code <task>`',
-        );
-        return;
-      }
+    switch (command) {
+      case 'code':
+        if (!args) {
+          await message.reply(
+            'Gunakan: `!code <task>`',
+          );
+          return;
+        }
 
-      await handleCode(message, args);
-      break;
+        await handleCodeCommand(message, args);
+        break;
 
-    case 'status':
-      await handleStatus(message);
-      break;
+      case 'status':
+        await handleStatusCommand(message);
+        break;
 
-    case 'reset':
-      await handleReset(message);
-      break;
+      case 'reset':
+        await handleResetCommand(message);
+        break;
 
-    case 'abort':
-      await handleAbort(message);
-      break;
+      case 'abort':
+        await handleAbortCommand(message);
+        break;
 
-    case 'help':
-      await handleHelp(message);
-      break;
+      case 'help':
+        await handleHelpCommand(message);
+        break;
+
+      default:
+        break;
+    }
+  } catch (error) {
+    console.error(
+      '[Discord Handler Error]',
+      error,
+    );
   }
 });
 
