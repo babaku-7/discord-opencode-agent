@@ -1,20 +1,28 @@
 # Discord OpenCode Agent
 
-A Discord coding agent powered by [OpenCode](https://opencode.ai/) and Cohere's North Mini Code.
+A Discord coding agent powered by [OpenCode](https://opencode.ai/).
 
 This project allows authorized Discord users to send coding tasks directly to an OpenCode coding agent through Discord.
+
+The agent can work with multiple AI models through OpenCode, currently supporting:
+
+- Cohere North Mini Code
+- Google Gemini 3.1 Flash-Lite
 
 ## Features
 
 - 🤖 Discord coding agent
 - 🧠 OpenCode integration
 - ⚡ Cohere North Mini Code
+- ✨ Google Gemini 3.1 Flash-Lite
+- 🔄 Switch AI models directly from Discord
+- 📡 Live OpenCode agent progress
 - 🔐 Discord user authorization
 - 📁 Configurable workspace
-- 💾 Persistent OpenCode sessions during runtime
+- 💾 Runtime OpenCode sessions
 - 🛑 Abort running tasks
 - 🧹 Reset sessions
-- 📊 Session status
+- 📊 Agent/session status
 - 💬 Automatic handling of long Discord responses
 - 🟦 TypeScript
 - 🟢 Node.js 22+
@@ -22,28 +30,65 @@ This project allows authorized Discord users to send coding tasks directly to an
 ## Architecture
 
 ```text
-    ┌──────────────┐
-    │    Discord   │
-    └──────┬───────┘
-           │
-           │ !code <task>
-           ▼
-┌──────────────────────┐
-│ Discord OpenCode     │
-│ Agent                │
-└──────────┬───────────┘
-           │
-           ▼
-┌──────────────────────┐
-│    OpenCode Server   │
-│      :4096           │
-└──────────┬───────────┘
-           │
-           ▼
-┌──────────────────────┐
-│       Cohere         │
-│ North Mini Code      │
-└──────────────────────┘
+                         ┌─────────────────┐
+                         │     Discord     │
+                         └────────┬────────┘
+                                  │
+                                  │ !code <task>
+                                  ▼
+                    ┌─────────────────────────┐
+                    │ Discord OpenCode Agent │
+                    │                         │
+                    │ Command Router          │
+                    │ Session Manager         │
+                    │ Model Manager           │
+                    └────────────┬────────────┘
+                                 │
+                                 ▼
+                    ┌─────────────────────────┐
+                    │     OpenCode Server     │
+                    │        :4096            │
+                    └────────────┬────────────┘
+                                 │
+                    ┌────────────┴────────────┐
+                    │                         │
+                    ▼                         ▼
+          ┌──────────────────┐      ┌──────────────────────┐
+          │      Cohere      │      │       Google         │
+          │ North Mini Code  │      │ Gemini 3.1 Flash-Lite│
+          └──────────────────┘      └──────────────────────┘
+```
+
+OpenCode is responsible for communicating with the configured AI providers and executing coding tasks inside the configured workspace.
+
+## Models
+
+### Cohere
+
+```text
+Provider: cohere
+Model: north-mini-code-1-0
+Name: Cohere North Mini Code
+```
+
+### Google
+
+```text
+Provider: google
+Model: gemini-3.1-flash-lite
+Name: Google Gemini 3.1 Flash-Lite
+```
+
+The model can be changed directly from Discord:
+
+```text
+!model cohere
+```
+
+or:
+
+```text
+!model gemini
 ```
 
 ## Commands
@@ -51,7 +96,10 @@ This project allows authorized Discord users to send coding tasks directly to an
 | Command | Description |
 |---|---|
 | `!code <task>` | Send a coding task to OpenCode |
-| `!status` | Show the current session status |
+| `!model` | Show the currently selected model |
+| `!model cohere` | Use Cohere North Mini Code |
+| `!model gemini` | Use Google Gemini 3.1 Flash-Lite |
+| `!status` | Show the current agent/session status |
 | `!reset` | Reset the current OpenCode session |
 | `!abort` | Abort the current OpenCode task |
 | `!help` | Show available commands |
@@ -62,7 +110,25 @@ This project allows authorized Discord users to send coding tasks directly to an
 !code buat file hello.txt berisi Hello World
 ```
 
-The agent will send the task to OpenCode and work inside the configured workspace.
+The agent sends the task to OpenCode and works inside the configured workspace.
+
+## Live Progress
+
+The agent receives OpenCode events through the OpenCode event stream.
+
+While a task is running, the Discord bot updates a progress message instead of sending a new Discord message for every event.
+
+Example:
+
+```text
+🤖 OpenCode Agent
+
+🔧 write sedang berjalan...
+✅ write → gemini-test.txt
+🔧 bash sedang berjalan...
+✅ bash → npm run build
+✅ Task selesai.
+```
 
 ## Requirements
 
@@ -73,7 +139,8 @@ Before running the project, make sure you have:
 - Git
 - A Discord application and bot
 - OpenCode
-- A configured Cohere provider/model in OpenCode
+- A configured OpenCode provider/model
+- Cohere and/or Google credentials configured in OpenCode
 
 ## Installation
 
@@ -115,7 +182,7 @@ OPENCODE_WORKSPACE=/home/your-user/ai-workspace/projects
 
 Your Discord bot token.
 
-**Never commit your real bot token to Git.**
+Never commit your real bot token to Git.
 
 ### ALLOWED_USER_IDS
 
@@ -186,22 +253,54 @@ Check available models:
 opencode models
 ```
 
-The current project uses:
+The project currently uses:
 
 ```text
 cohere/north-mini-code-1-0
+google/gemini-3.1-flash-lite
 ```
 
-Make sure the Cohere provider and model are available in your OpenCode configuration.
+Make sure the required provider credentials are configured in OpenCode.
+
+## OpenCode Authentication
+
+The Discord agent does not directly communicate with Cohere or Google.
+
+The architecture is:
+
+```text
+Discord Bot
+    ↓
+OpenCode SDK
+    ↓
+OpenCode Server
+    ↓
+AI Provider
+```
+
+Provider authentication must therefore be configured in OpenCode.
+
+Check configured authentication:
+
+```bash
+opencode auth list
+```
+
+If a provider is not authenticated, configure it using the OpenCode authentication flow.
 
 ## Discord Bot Setup
 
 Create a Discord application and bot through the Discord Developer Portal.
 
-Enable **Message Content Intent** because the bot reads commands such as:
+Enable:
+
+- Message Content Intent
+
+The bot reads commands such as:
 
 ```text
 !code
+!model
 !status
 !reset
 !abort
@@ -269,6 +368,7 @@ You should see something similar to:
 [OpenCode] URL: http://127.0.0.1:4096
 [Workspace] /home/your-user/ai-workspace/projects
 [Security] 1 authorized user(s)
+[Models] Cohere North Mini Code + Google Gemini 3.1 Flash-Lite
 [Agent] Ready.
 ```
 
@@ -278,7 +378,13 @@ Then use Discord:
 !status
 ```
 
-and:
+Select a model:
+
+```text
+!model gemini
+```
+
+Then send a coding task:
 
 ```text
 !code buat file test.txt berisi Hello World
@@ -291,8 +397,24 @@ discord-opencode-agent/
 │
 ├── src/
 │   ├── index.ts
-│   └── opencode/
-│       └── client.ts
+│   │
+│   ├── config.ts
+│   ├── models.ts
+│   ├── state.ts
+│   │
+│   ├── commands/
+│   │   ├── code.ts
+│   │   ├── help.ts
+│   │   ├── model.ts
+│   │   ├── session.ts
+│   │   └── status.ts
+│   │
+│   ├── opencode/
+│   │   ├── client.ts
+│   │   └── events.ts
+│   │
+│   └── utils/
+│       └── discord.ts
 │
 ├── .env.example
 ├── .gitignore
@@ -302,6 +424,87 @@ discord-opencode-agent/
 └── tsconfig.json
 ```
 
+### Source Responsibilities
+
+#### `src/index.ts`
+
+Main Discord entry point responsible for Discord client initialization, message handling, command routing, error handling, and bot login.
+
+#### `src/config.ts`
+
+Loads and validates environment variables.
+
+#### `src/models.ts`
+
+Contains supported agent models.
+
+#### `src/state.ts`
+
+Stores runtime state:
+
+- OpenCode sessions
+- Running tasks
+- Selected models
+
+#### `src/commands/`
+
+Contains Discord command handlers:
+
+```text
+code.ts
+```
+
+Handles coding tasks.
+
+```text
+model.ts
+```
+
+Handles model selection.
+
+```text
+status.ts
+```
+
+Handles agent status.
+
+```text
+session.ts
+```
+
+Handles session reset and task abortion.
+
+```text
+help.ts
+```
+
+Handles command help.
+
+#### `src/opencode/client.ts`
+
+Wrapper around the OpenCode SDK.
+
+Responsible for:
+
+- Creating sessions
+- Sending prompts
+- Selecting models
+- Aborting sessions
+- Passing the workspace directory
+
+#### `src/opencode/events.ts`
+
+Handles OpenCode event streaming and live task progress.
+
+#### `src/utils/discord.ts`
+
+Contains reusable Discord helpers such as:
+
+- Session key generation
+- Authorization checks
+- Response extraction
+- Long-message handling
+
 ## How Sessions Work
 
 The bot maintains an OpenCode session based on:
@@ -310,7 +513,7 @@ The bot maintains an OpenCode session based on:
 guildId:channelId:userId
 ```
 
-Different users or channels can therefore have separate sessions.
+This means different users or channels can have separate runtime sessions.
 
 Using:
 
@@ -318,7 +521,15 @@ Using:
 !reset
 ```
 
-removes the current session mapping. The next `!code` request creates a new OpenCode session.
+removes the current session mapping.
+
+The next `!code` request creates a new OpenCode session.
+
+### Important
+
+Sessions are currently stored in memory.
+
+Restarting the Discord bot clears the session mappings.
 
 ## Workspace
 
@@ -383,6 +594,7 @@ or files containing:
 API keys
 Discord bot tokens
 Cohere credentials
+Google credentials
 SSH keys
 passwords
 ```
@@ -401,7 +613,7 @@ dist/
 
 The project uses:
 
-- Node.js
+- Node.js 22+
 - TypeScript
 - discord.js
 - @opencode-ai/sdk
@@ -447,6 +659,28 @@ If OpenCode is not running:
 opencode serve --hostname 127.0.0.1 --port 4096
 ```
 
+### Model is not available
+
+Check:
+
+```bash
+opencode models
+```
+
+For Gemini:
+
+```bash
+opencode models | grep "gemini-3.1-flash-lite"
+```
+
+For Cohere:
+
+```bash
+opencode models | grep "north-mini-code"
+```
+
+If the model does not appear, check the OpenCode provider configuration and authentication.
+
 ### User is not authorized
 
 Check:
@@ -461,18 +695,38 @@ The value must be a Discord user ID, not a username, server ID, or channel ID.
 
 Check that `OPENCODE_WORKSPACE` is an absolute path and that the directory exists and is accessible by the user running OpenCode.
 
+### Agent returns an empty text response
+
+Some coding tasks primarily perform tool operations such as creating or modifying files.
+
+In these cases, OpenCode may complete the task without returning a normal assistant text response.
+
+Check the configured workspace for the resulting files.
+
+The Discord agent will still display the OpenCode task progress and completion status.
+
 ## Roadmap
 
-- [ ] Streaming OpenCode responses
-- [ ] Real-time agent status
+- [x] Discord coding agent
+- [x] OpenCode integration
+- [x] Cohere model support
+- [x] Gemini 3.1 Flash-Lite support
+- [x] Multiple model selection
+- [x] Discord user authorization
+- [x] Runtime session management
+- [x] Task abortion
+- [x] Session reset
+- [x] Agent status
+- [x] Long Discord response handling
+- [x] OpenCode live progress
+- [x] Organized command architecture
 - [ ] File change summaries
 - [ ] `!diff` command
 - [ ] Git integration
-- [ ] Session persistence
+- [ ] Persistent sessions
 - [ ] Better permission management
 - [ ] Workspace isolation
 - [ ] Docker sandbox
-- [ ] Multiple model selection
 - [ ] Better error recovery
 - [ ] Web dashboard
 
