@@ -1,14 +1,34 @@
 import { createOpencodeClient } from '@opencode-ai/sdk/client';
 
+export type AgentModel = 'cohere' | 'gemini';
+
+export const MODELS: Record<
+  AgentModel,
+  {
+    providerID: string;
+    modelID: string;
+    label: string;
+  }
+> = {
+  cohere: {
+    providerID: 'cohere',
+    modelID: 'north-mini-code-1-0',
+    label: 'Cohere North Mini Code',
+  },
+
+  gemini: {
+    providerID: 'google',
+    modelID: 'gemini-3.1-flash-lite',
+    label: 'Google Gemini 3.1 Flash-Lite',
+  },
+};
+
 export class OpenCodeClient {
   private client;
 
   private readonly workspace =
     process.env['OPENCODE_WORKSPACE'] ||
     '/home/babaku/ai-workspace/projects';
-
-  private readonly providerID = 'cohere';
-  private readonly modelID = 'north-mini-code-1-0';
 
   constructor() {
     this.client = createOpencodeClient({
@@ -27,8 +47,10 @@ export class OpenCodeClient {
       query: {
         directory: this.workspace,
       },
+
       body: {
-        title: title || 'Discord Coding Session',
+        title:
+          title || 'Discord Coding Session',
       },
     });
   }
@@ -36,20 +58,30 @@ export class OpenCodeClient {
   async sendPrompt(
     sessionId: string,
     prompt: string,
+    model: AgentModel = 'cohere',
   ) {
+    const selectedModel = MODELS[model];
+
     return this.client.session.prompt({
       path: {
         id: sessionId,
       },
+
       query: {
         directory: this.workspace,
       },
+
       body: {
         model: {
-          providerID: this.providerID,
-          modelID: this.modelID,
+          providerID:
+            selectedModel.providerID,
+
+          modelID:
+            selectedModel.modelID,
         },
+
         agent: 'build',
+
         parts: [
           {
             type: 'text',
@@ -60,11 +92,14 @@ export class OpenCodeClient {
     });
   }
 
-  async abortSession(sessionId: string) {
+  async abortSession(
+    sessionId: string,
+  ) {
     return this.client.session.abort({
       path: {
         id: sessionId,
       },
+
       query: {
         directory: this.workspace,
       },
