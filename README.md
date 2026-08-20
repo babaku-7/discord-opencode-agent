@@ -22,12 +22,12 @@ This project allows authorized Discord users to send coding tasks directly to an
 ## Architecture
 
 ```text
-┌──────────────┐
-│    Discord   │
-└──────┬───────┘
-       │
-       │ !code <task>
-       ▼
+    ┌──────────────┐
+    │    Discord   │
+    └──────┬───────┘
+           │
+           │ !code <task>
+           ▼
 ┌──────────────────────┐
 │ Discord OpenCode     │
 │ Agent                │
