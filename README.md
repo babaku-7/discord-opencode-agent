@@ -11,55 +11,22 @@ The agent can work with multiple AI models through OpenCode, currently supportin
 
 ## Features
 
-- 🤖 Discord coding agent
-- 🧠 OpenCode integration
-- ⚡ Cohere North Mini Code
-- ✨ Google Gemini 3.1 Flash-Lite
-- 🔄 Switch AI models directly from Discord
-- 📡 Live OpenCode agent progress
-- 🔐 Discord user authorization
-- 📁 Configurable workspace
-- 💾 Runtime OpenCode sessions
-- 🛑 Abort running tasks
-- 🧹 Reset sessions
-- 📊 Agent/session status
-- 💬 Automatic handling of long Discord responses
-- 🟦 TypeScript
-- 🟢 Node.js 22+
+-  Discord coding agent
+-  OpenCode integration
+-  Cohere North Mini Code
+-  Google Gemini 3.1 Flash-Lite
+-  Switch AI models directly from Discord
+-  Live OpenCode agent progress
+-  Discord user authorization
+-  Configurable workspace
+-  Runtime OpenCode sessions
+-  Abort running tasks
+-  Reset sessions
+-  Agent/session status
+-  Automatic handling of long Discord responses
+-  TypeScript
+-  Node.js 22+
 
-## Architecture
-
-```text
-                         ┌─────────────────┐
-                         │     Discord     │
-                         └────────┬────────┘
-                                  │
-                                  │ !code <task>
-                                  ▼
-                    ┌─────────────────────────┐
-                    │ Discord OpenCode Agent  │
-                    │                         │
-                    │ Command Router          │
-                    │ Session Manager         │
-                    │ Model Manager           │
-                    └────────────┬────────────┘
-                                 │
-                                 ▼
-                    ┌─────────────────────────┐
-                    │     OpenCode Server     │
-                    │        :4096            │
-                    └────────────┬────────────┘
-                                 │
-                    ┌────────────┴────────────┐
-                    │                         │
-                    ▼                         ▼
-          ┌──────────────────┐      ┌──────────────────────┐
-          │      Cohere      │      │       Google         │
-          │ North Mini Code  │      │ Gemini 3.1 Flash-Lite│
-          └──────────────────┘      └──────────────────────┘
-```
-
-OpenCode is responsible for communicating with the configured AI providers and executing coding tasks inside the configured workspace.
 
 ## Models
 
