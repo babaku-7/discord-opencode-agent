@@ -18,7 +18,7 @@ export async function handleAbortCommand(message: Message, openCode: OpenCodeCli
   try {
     await openCode.abortSession(sessionId);
     running.delete(key);
-    await message.reply('🛑 Request OpenCode dihentikan.');
+    await message.reply('Request OpenCode dihentikan.');
   } catch (error) {
     console.error('[OpenCode Abort Error]', error);
     const text = error instanceof Error ? error.message : String(error);

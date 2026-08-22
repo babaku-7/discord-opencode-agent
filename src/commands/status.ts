@@ -10,7 +10,7 @@ export async function handleStatusCommand(message: Message, openCode: OpenCodeCl
   const selected = selectedModels.get(key) ?? 'cohere';
   const model = MODELS[selected];
   await message.reply([
-    '**🤖 Agent Status**', '',
+    '**Agent Status**', '',
     `Status: ${sessionId ? '🟢 Session active' : '⚪ No session'}`,
     `Session: \`${sessionId ?? 'none'}\``,
     `Running: \`${running.has(key)}\``, '',

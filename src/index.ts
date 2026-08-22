@@ -28,7 +28,7 @@ client.on('messageCreate', async (message) => {
     const content = message.content.trim();
     if (!content.startsWith('!')) return;
     if (!isAuthorized(message, config.allowedUsers)) {
-      await message.reply('⛔ Kamu tidak memiliki izin menggunakan coding agent.');
+      await message.reply('Kamu tidak memiliki izin menggunakan coding agent.');
       console.log(`[Security] Unauthorized user: ${message.author.tag} (${message.author.id})`);
       return;
     }

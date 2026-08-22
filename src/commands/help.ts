@@ -2,7 +2,7 @@ import type { Message } from 'discord.js';
 
 export async function handleHelpCommand(message: Message): Promise<void> {
   await message.reply([
-    '**🤖 Discord OpenCode Agent**', '',
+    '**Discord OpenCode Agent**', '',
     '**Coding**',
     '`!code <task>` — kirim task ke agent',
     '`!abort` — hentikan task aktif', '',

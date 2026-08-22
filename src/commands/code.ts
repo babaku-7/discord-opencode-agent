@@ -26,7 +26,7 @@ function formatProgress(
   lines: string[],
 ): string {
   const header =
-    '🤖 **OpenCode Agent**\n\n';
+    '**OpenCode Agent**\n\n';
 
   const body =
     lines
@@ -156,7 +156,7 @@ export async function handleCodeCommand(
     const progressMessage =
       await channel.send(
         [
-          '🤖 **OpenCode Agent**',
+          '**OpenCode Agent**',
           '',
           '⏳ Agent sedang bekerja...',
           '',
