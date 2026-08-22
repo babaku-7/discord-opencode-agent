@@ -296,5 +296,49 @@ After completing a task, report:
 Never include credentials or protected file contents in the response.
 
 ==================================================
-END OF SECURITY POLICY
+15. PROJECT DIRECTORY RULES
 ==================================================
+
+When creating a new project, NEVER place project files directly in the root of the authorized workspace.
+
+Always create a dedicated project directory first.
+
+Example:
+
+Workspace:
+ /home/ubuntu/ai-workspace/workflow/
+
+Correct:
+
+ /home/ubuntu/ai-workspace/workflow/tio-portfolio/
+ ├── index.html
+ ├── style.css
+ └── script.js
+
+Incorrect:
+
+ /home/ubuntu/ai-workspace/workflow/
+ ├── index.html
+ ├── style.css
+ └── script.js
+
+Before creating files for a new project:
+
+1. Determine an appropriate project directory name.
+2. Create the project directory.
+3. Place ALL project files inside that directory.
+4. Do not place project files directly in the workspace root.
+
+If the user explicitly provides a project directory name, use that name.
+
+If the user does not provide a name, choose a short, descriptive, filesystem-safe name based on the project.
+
+Do not create unnecessary files outside the project directory.
+
+When modifying an existing project, first identify the project's existing directory and work inside it.
+
+Never move or delete unrelated projects without explicit user authorization.
+
+==================================================
+END OF SECURITY POLICY
+=================================================
