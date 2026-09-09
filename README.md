@@ -67,6 +67,55 @@ Key points:
 - OpenCode running locally or on a reachable host
 - A valid OpenCode model/provider configured in the OpenCode environment
 
+## Environment variables
+
+Create a `.env` file from the example and set the required values:
+
+```bash
+cp .env.example .env
+```
+
+```env
+DISCORD_BOT_TOKEN=your_discord_bot_token
+DISCORD_GUILD_ID=
+ALLOWED_USER_IDS=your_discord_user_id
+OPENCODE_URL=http://127.0.0.1:4096
+OPENCODE_WORKSPACE=/home/your-user/ai-workspace/projects
+```
+
+Important notes:
+
+- `DISCORD_BOT_TOKEN` is the token from your Discord application.
+- `DISCORD_GUILD_ID` is optional; when set, slash commands register faster in that guild.
+- `ALLOWED_USER_IDS` restricts access to the approved Discord user IDs.
+- `OPENCODE_URL` must point to the running OpenCode server.
+- `OPENCODE_WORKSPACE` must be an absolute filesystem path that the OpenCode server can access.
+
+## Model configuration
+
+The project supports these default model choices:
+
+```text
+cohere/north-mini-code-1-0
+google/gemini-3.1-flash-lite
+```
+
+Use:
+
+```text
+!model
+!model cohere
+!model gemini
+```
+
+or slash equivalents:
+
+```text
+/model
+/model cohere
+/model gemini
+```
+
 ## Setup
 
 Install dependencies:

@@ -95,13 +95,10 @@ export function buildAgentContainer({
   return container;
 }
 
-export function splitLongText(text: string, maxLength = 1800): string[] {
-  const normalized = text.replace(/\r\n/g, '\n').trim();
-  if (!normalized) return [];
-
+function splitTextBlock(block: string, maxLength: number): string[] {
+  const paragraphs = block.split(/\n{2,}/);
   const chunks: string[] = [];
   let current = '';
-  let inCodeFence = false;
 
   const flushCurrent = (): void => {
     if (current.trim()) {
@@ -110,75 +107,144 @@ export function splitLongText(text: string, maxLength = 1800): string[] {
     }
   };
 
-  const splitLine = (line: string): string[] => {
-    if (line.length <= maxLength) return [line];
+  for (const paragraph of paragraphs) {
+    const trimmed = paragraph.trim();
+    if (!trimmed) continue;
 
-    const pieces: string[] = [];
-    let segment = line;
-    while (segment.length > maxLength) {
-      const cut = segment.slice(0, maxLength).lastIndexOf(' ');
-      const splitAt = cut > 0 ? cut : maxLength;
-      pieces.push(segment.slice(0, splitAt).trim());
-      segment = segment.slice(splitAt).trimStart();
-    }
-
-    if (segment.trim()) pieces.push(segment.trim());
-    return pieces.filter(Boolean);
-  };
-
-  for (const rawLine of normalized.split('\n')) {
-    const line = rawLine;
-    const isFenceLine = /^```/.test(line.trim());
-
-    if (isFenceLine) {
-      if (current && current.length + line.length + 1 > maxLength && !inCodeFence) {
-        flushCurrent();
-      }
-
-      current = current ? `${current}\n${line}` : line;
-      inCodeFence = !inCodeFence;
-      continue;
-    }
-
-    if (inCodeFence) {
-      current = current ? `${current}\n${line}` : line;
-      continue;
-    }
-
-    const candidate = current ? `${current}\n${line}` : line;
+    const candidate = current ? `${current}\n\n${trimmed}` : trimmed;
     if (candidate.length <= maxLength) {
       current = candidate;
       continue;
     }
 
-    if (current) {
-      flushCurrent();
+    if (current) flushCurrent();
+
+    const lines = trimmed.split('\n');
+    for (const line of lines) {
+      const next = current ? `${current}\n${line}` : line;
+      if (next.length <= maxLength) {
+        current = next;
+        continue;
+      }
+
+      if (current) flushCurrent();
+
+      let segment = line;
+      while (segment.length > maxLength) {
+        const cut = segment.slice(0, maxLength).lastIndexOf(' ');
+        const splitAt = cut > 0 ? cut : maxLength;
+        chunks.push(segment.slice(0, splitAt).trim());
+        segment = segment.slice(splitAt).trimStart();
+      }
+
+      if (segment.trim()) current = segment.trim();
     }
+  }
 
-    const parts = splitLine(line);
-    if (parts.length === 0) continue;
+  if (current.trim()) chunks.push(current.trim());
+  return chunks.filter(Boolean);
+}
 
-    if (parts.length === 1) {
-      const singlePart = parts[0];
-      if (singlePart) current = singlePart;
+function splitCodeFenceBlock(language: string, lines: string[], maxLength: number): string[] {
+  const opener = `\`\`\`${language ? `${language}` : ''}\n`;
+  const closer = '```';
+  const chunks: string[] = [];
+  let current = opener;
+
+  const flushCurrent = (): void => {
+    if (current !== opener) {
+      chunks.push(`${current}${closer}`);
+      current = opener;
+    }
+  };
+
+  const splitLongLine = (line: string): void => {
+    const contentLimit = Math.max(1, maxLength - opener.length - closer.length - 1);
+    let segment = line;
+    while (segment.length > contentLimit) {
+      const piece = segment.slice(0, contentLimit);
+      chunks.push(`${opener}${piece}\n${closer}`);
+      segment = segment.slice(contentLimit);
+    }
+    if (segment.length > 0) {
+      current = `${current}${segment}\n`;
+    }
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine ?? '';
+    const candidate = `${current}${line}\n`;
+    if (candidate.length + closer.length <= maxLength) {
+      current = candidate;
       continue;
     }
 
-    flushCurrent();
-    const leadingParts = parts.slice(0, -1);
-    if (leadingParts.length > 0) chunks.push(...leadingParts.filter(Boolean));
+    if (current !== opener) {
+      flushCurrent();
+    }
 
-    const lastPart = parts[parts.length - 1];
-    if (lastPart) current = lastPart;
+    const contentLimit = Math.max(1, maxLength - opener.length - closer.length - 1);
+    if (line.length > contentLimit) {
+      splitLongLine(line);
+      continue;
+    }
+
+    current = `${opener}${line}\n`;
   }
 
-  if (inCodeFence && current) {
-    flushCurrent();
-  } else if (current.trim()) {
-    chunks.push(current.trim());
+  if (current !== opener) {
+    chunks.push(`${current}${closer}`);
+  } else if (lines.length === 0) {
+    chunks.push(`${opener}${closer}`);
   }
 
   return chunks.filter(Boolean);
+}
+
+export function splitLongText(text: string, maxLength = 1800): string[] {
+  const normalized = text.replace(/\r\n/g, '\n').trim();
+  if (!normalized) return [];
+
+  const lines = normalized.split('\n');
+  const chunks: string[] = [];
+
+  for (let i = 0; i < lines.length; ) {
+    const line = lines[i] ?? '';
+
+    if (/^```/.test(line.trim())) {
+      const languageMatch = line.trim().match(/^```(.*)$/);
+      const language = languageMatch?.[1]?.trim() ?? '';
+      const codeLines: string[] = [];
+      i += 1;
+
+      while (i < lines.length) {
+        const currentLine = lines[i] ?? '';
+        if (/^```/.test(currentLine.trim())) break;
+        codeLines.push(currentLine);
+        i += 1;
+      }
+
+      if (i < lines.length && /^```/.test((lines[i] ?? '').trim())) {
+        i += 1;
+      }
+
+      chunks.push(...splitCodeFenceBlock(language, codeLines, maxLength));
+      continue;
+    }
+
+    const textLines: string[] = [];
+    while (i < lines.length) {
+      const currentLine = lines[i] ?? '';
+      if (/^```/.test(currentLine.trim())) break;
+      textLines.push(currentLine);
+      i += 1;
+    }
+
+    const block = textLines.join('\n');
+    chunks.push(...splitTextBlock(block, maxLength));
+  }
+
+  return chunks.filter((chunk) => chunk.length <= maxLength && chunk.trim().length > 0);
 }
 
 export function componentsV2Payload<const T extends JSONEncodable<APIMessageTopLevelComponent>>(
