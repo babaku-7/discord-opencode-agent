@@ -4,4 +4,4 @@ export const sessions = new Map<string, string>();
 export const running = new Set<string>();
 export const selectedModels = new Map<string, AgentModel>();
 
-export const DEFAULT_MODEL: AgentModel = 'cohere';
+export const DEFAULT_MODEL: AgentModel = 'gemini';
