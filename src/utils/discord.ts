@@ -206,7 +206,7 @@ export function buildReplyActionRow(sessionKey: string): ActionRowBuilder<Button
     new ButtonBuilder()
       .setCustomId(`opencode_reply:${sessionKey}`)
       .setLabel('Reply')
-      .setStyle(ButtonStyle.Primary),
+      .setStyle(ButtonStyle.Secondary),
   );
 }
 
