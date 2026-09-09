@@ -54,6 +54,7 @@ The bot now uses Discord Components V2 for most response cards and status output
 Key points:
 
 - response payloads use `MessageFlags.IsComponentsV2`
+- deferred slash responses must opt into Components V2 from the initial `deferReply()` call so later `editReply()` updates remain valid
 - status and session panels are rendered in container format
 - long output is collapsed into a single safe Discord message instead of flooding the channel
 - slash commands are registered to a guild when `DISCORD_GUILD_ID` is set, which makes them appear faster in a specific server

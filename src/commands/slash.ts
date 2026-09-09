@@ -1,4 +1,4 @@
-import { ApplicationCommandOptionType, REST, Routes, type ChatInputCommandInteraction, type Client } from 'discord.js';
+import { ApplicationCommandOptionType, MessageFlags, REST, Routes, type ChatInputCommandInteraction, type Client, type InteractionDeferReplyOptions } from 'discord.js';
 import { MODELS } from '../models.js';
 import { config } from '../config.js';
 import { OpenCodeClient } from '../opencode/client.js';
@@ -45,7 +45,9 @@ async function handleSlashCode(interaction: ChatInputCommandInteraction, openCod
     return;
   }
 
-  await interaction.deferReply();
+  await interaction.deferReply({
+    flags: MessageFlags.IsComponentsV2 as InteractionDeferReplyOptions['flags'],
+  });
 
   if (!interaction.channel || !interaction.channel.isSendable()) {
     await interaction.editReply('Channel tidak tersedia untuk menjalankan request.');
@@ -130,13 +132,14 @@ async function handleSlashStatus(interaction: ChatInputCommandInteraction): Prom
   const sessionId = sessions.get(key);
   const selected = selectedModels.get(key) ?? DEFAULT_MODEL;
   const model = MODELS[selected];
+  const openCodeState = running.has(key) ? 'Busy' : sessionId ? 'Idle' : 'Offline';
 
   await interaction.reply(
     componentsV2Payload([
       buildAgentContainer({
         title: '## Agent Status',
-        content: [`Status: ${sessionId ? 'Online' : 'Offline'}`, `OpenCode: ${running.has(key) ? 'Busy' : 'Connected'}`].join('\n'),
-        status: running.has(key) ? 'Working' : 'Ready',
+        content: [`Status: ${sessionId ? 'Online' : 'Offline'}`, `OpenCode: ${openCodeState}`].join('\n'),
+        status: running.has(key) ? 'Working' : sessionId ? 'Ready' : 'Idle',
         model: `${model.providerID}/${model.modelID}`,
         session: sessionId ?? 'none',
       }),

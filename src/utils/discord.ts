@@ -99,49 +99,82 @@ export function splitLongText(text: string, maxLength = 1800): string[] {
   const normalized = text.replace(/\r\n/g, '\n').trim();
   if (!normalized) return [];
 
-  const paragraphs = normalized.split(/\n{2,}/);
   const chunks: string[] = [];
   let current = '';
+  let inCodeFence = false;
 
-  for (const paragraph of paragraphs) {
-    const candidate = current ? `${current}\n\n${paragraph}` : paragraph;
+  const flushCurrent = (): void => {
+    if (current.trim()) {
+      chunks.push(current.trim());
+      current = '';
+    }
+  };
 
+  const splitLine = (line: string): string[] => {
+    if (line.length <= maxLength) return [line];
+
+    const pieces: string[] = [];
+    let segment = line;
+    while (segment.length > maxLength) {
+      const cut = segment.slice(0, maxLength).lastIndexOf(' ');
+      const splitAt = cut > 0 ? cut : maxLength;
+      pieces.push(segment.slice(0, splitAt).trim());
+      segment = segment.slice(splitAt).trimStart();
+    }
+
+    if (segment.trim()) pieces.push(segment.trim());
+    return pieces.filter(Boolean);
+  };
+
+  for (const rawLine of normalized.split('\n')) {
+    const line = rawLine;
+    const isFenceLine = /^```/.test(line.trim());
+
+    if (isFenceLine) {
+      if (current && current.length + line.length + 1 > maxLength && !inCodeFence) {
+        flushCurrent();
+      }
+
+      current = current ? `${current}\n${line}` : line;
+      inCodeFence = !inCodeFence;
+      continue;
+    }
+
+    if (inCodeFence) {
+      current = current ? `${current}\n${line}` : line;
+      continue;
+    }
+
+    const candidate = current ? `${current}\n${line}` : line;
     if (candidate.length <= maxLength) {
       current = candidate;
       continue;
     }
 
     if (current) {
-      chunks.push(current.trim());
-      current = '';
+      flushCurrent();
     }
 
-    const lines = paragraph.split('\n');
-    for (const line of lines) {
-      const next = current ? `${current}\n${line}` : line;
-      if (next.length <= maxLength) {
-        current = next;
-        continue;
-      }
+    const parts = splitLine(line);
+    if (parts.length === 0) continue;
 
-      if (current) {
-        chunks.push(current.trim());
-        current = '';
-      }
-
-      let segment = line;
-      while (segment.length > maxLength) {
-        const cut = segment.slice(0, maxLength).lastIndexOf(' ');
-        const splitAt = cut > 0 ? cut : maxLength;
-        chunks.push(segment.slice(0, splitAt).trim());
-        segment = segment.slice(splitAt).trimStart();
-      }
-
-      current = segment;
+    if (parts.length === 1) {
+      const singlePart = parts[0];
+      if (singlePart) current = singlePart;
+      continue;
     }
+
+    flushCurrent();
+    const leadingParts = parts.slice(0, -1);
+    if (leadingParts.length > 0) chunks.push(...leadingParts.filter(Boolean));
+
+    const lastPart = parts[parts.length - 1];
+    if (lastPart) current = lastPart;
   }
 
-  if (current.trim()) {
+  if (inCodeFence && current) {
+    flushCurrent();
+  } else if (current.trim()) {
     chunks.push(current.trim());
   }
 

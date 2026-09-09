@@ -10,16 +10,18 @@ export async function handleStatusCommand(message: Message, openCode: OpenCodeCl
   const selected = selectedModels.get(key) ?? DEFAULT_MODEL;
   const model = MODELS[selected];
 
+  const openCodeState = running.has(key) ? 'Busy' : sessionId ? 'Idle' : 'Offline';
+
   await message.reply(
     componentsV2Payload([
       buildAgentContainer({
         title: '## Agent Status',
         content: [
           `Status: ${sessionId ? 'Online' : 'Offline'}`,
-          `OpenCode: ${running.has(key) ? 'Busy' : 'Connected'}`,
+          `OpenCode: ${openCodeState}`,
           `Workspace: \`${openCode.getWorkspace()}\``,
         ].join('\n'),
-        status: running.has(key) ? 'Working' : 'Ready',
+        status: running.has(key) ? 'Working' : sessionId ? 'Ready' : 'Idle',
         model: `${model.providerID}/${model.modelID}`,
         session: sessionId ?? 'none',
       }),
