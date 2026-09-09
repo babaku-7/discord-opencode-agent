@@ -1,5 +1,5 @@
 import type { APIMessageTopLevelComponent, Message } from 'discord.js';
-import { MessageFlags, SeparatorSpacingSize } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, SeparatorSpacingSize } from 'discord.js';
 import { ContainerBuilder, SeparatorBuilder, TextDisplayBuilder } from '@discordjs/builders';
 import type { JSONEncodable } from '@discordjs/util';
 
@@ -201,6 +201,15 @@ function splitCodeFenceBlock(language: string, lines: string[], maxLength: numbe
   return chunks.filter(Boolean);
 }
 
+export function buildReplyActionRow(sessionKey: string): ActionRowBuilder<ButtonBuilder> {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`opencode_reply:${sessionKey}`)
+      .setLabel('Reply')
+      .setStyle(ButtonStyle.Primary),
+  );
+}
+
 export function splitLongText(text: string, maxLength = 1800): string[] {
   const normalized = text.replace(/\r\n/g, '\n').trim();
   if (!normalized) return [];
@@ -259,6 +268,7 @@ export function componentsV2Payload<const T extends JSONEncodable<APIMessageTopL
 export async function sendLongMessage(
   target: { channel: { isSendable(): boolean; send: (...args: unknown[]) => Promise<unknown> } },
   text: string,
+  sessionKey?: string,
 ): Promise<void> {
   const channel = target.channel;
   if (!channel.isSendable()) return;
@@ -268,13 +278,17 @@ export async function sendLongMessage(
 
   const chunks = splitLongText(safeText, 1800);
 
-  for (const chunk of chunks) {
+  for (let index = 0; index < chunks.length; index += 1) {
+    const chunk = chunks[index] ?? '';
+    if (!chunk) continue;
+
     const payload = componentsV2Payload([
       buildAgentContainer({
         title: '## OpenCode Agent',
         content: chunk,
         status: 'Completed',
       }),
+      ...(sessionKey && index === chunks.length - 1 ? [buildReplyActionRow(sessionKey)] : []),
     ]);
 
     await channel.send(payload);

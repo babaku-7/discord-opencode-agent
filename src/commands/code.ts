@@ -4,6 +4,7 @@ import { OpenCodeClient } from '../opencode/client.js';
 import { OpenCodeEvents, type OpenCodeProgress } from '../opencode/events.js';
 import {
   buildAgentContainer,
+  buildReplyActionRow,
   componentsV2Payload,
   extractText,
   getSessionKeyFromContext,
@@ -188,6 +189,7 @@ export async function handleCodeCommand(
           model: modelLabel,
           session: sessionId,
         }),
+        buildReplyActionRow(key),
       ]);
 
       if (isDeferredInteraction) {
@@ -196,7 +198,7 @@ export async function handleCodeCommand(
         }
         await context.edit(finalPayload);
       } else {
-        await sendLongMessage({ channel }, text);
+        await sendLongMessage({ channel }, text, key);
       }
     } else {
       console.log('[OpenCode] No text response.');
