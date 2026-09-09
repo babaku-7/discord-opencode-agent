@@ -1,10 +1,14 @@
 import type { APIMessageTopLevelComponent, Message } from 'discord.js';
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, SeparatorSpacingSize } from 'discord.js';
+import { MessageFlags, SeparatorSpacingSize } from 'discord.js';
 import { ContainerBuilder, SeparatorBuilder, TextDisplayBuilder } from '@discordjs/builders';
 import type { JSONEncodable } from '@discordjs/util';
 
+export function getSessionKeyFromContext(context: { guildId: string | null; channelId: string; author: { id: string } }): string {
+  return [context.guildId ?? 'dm', context.channelId, context.author.id].join(':');
+}
+
 export function getSessionKey(message: Message): string {
-  return [message.guildId ?? 'dm', message.channelId, message.author.id].join(':');
+  return getSessionKeyFromContext({ guildId: message.guildId, channelId: message.channelId, author: message.author });
 }
 
 export function isAuthorized(message: Message, users: Set<string>): boolean {
@@ -153,17 +157,11 @@ export function componentsV2Payload<const T extends JSONEncodable<APIMessageTopL
   return { components, flags: MessageFlags.IsComponentsV2 };
 }
 
-export function buildReplyActionRow(customId: string): ActionRowBuilder<ButtonBuilder> {
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(customId)
-      .setLabel('Reply')
-      .setStyle(ButtonStyle.Primary),
-  );
-}
-
-export async function sendLongMessage(message: Message, text: string, customId?: string): Promise<void> {
-  const channel = message.channel;
+export async function sendLongMessage(
+  target: { channel: { isSendable(): boolean; send: (...args: unknown[]) => Promise<unknown> } },
+  text: string,
+): Promise<void> {
+  const channel = target.channel;
   if (!channel.isSendable()) return;
 
   const safeText = text.trim();
@@ -178,7 +176,6 @@ export async function sendLongMessage(message: Message, text: string, customId?:
         content: chunk,
         status: 'Completed',
       }),
-      ...(customId ? [buildReplyActionRow(customId)] : []),
     ]);
 
     await channel.send(payload);

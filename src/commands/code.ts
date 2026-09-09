@@ -1,18 +1,31 @@
-import type { Message } from 'discord.js';
-
 import { MODELS } from '../models.js';
 import { DEFAULT_MODEL, running, selectedModels, sessions } from '../state.js';
 import { OpenCodeClient } from '../opencode/client.js';
 import { OpenCodeEvents, type OpenCodeProgress } from '../opencode/events.js';
 import {
   buildAgentContainer,
-  buildReplyActionRow,
   componentsV2Payload,
   extractText,
-  getSessionKey,
+  getSessionKeyFromContext,
   sendLongMessage,
   unwrapResponse,
 } from '../utils/discord.js';
+
+export type CodeExecutionContext = {
+  guildId: string | null;
+  channelId: string;
+  author: { id: string; tag?: string; username?: string };
+  channel: {
+    isSendable(): boolean;
+    send: (...args: any[]) => Promise<any>;
+    sendTyping: () => Promise<any>;
+  };
+  edit?: (payload: ReturnType<typeof componentsV2Payload>) => Promise<unknown>;
+};
+
+type ProgressEditor = {
+  edit: (payload: ReturnType<typeof componentsV2Payload>) => Promise<unknown>;
+};
 
 function getProgressPayload(content: string, model: string, session: string, status = 'Working'): ReturnType<typeof componentsV2Payload> {
   return componentsV2Payload([
@@ -30,7 +43,7 @@ function makePromptPreview(prompt: string): string {
   return prompt.length > 180 ? `${prompt.slice(0, 177).trimEnd()}...` : prompt;
 }
 
-async function updateProgress(progressMessage: Message | { edit: (payload: ReturnType<typeof componentsV2Payload>) => Promise<unknown> }, content: string, model: string, session: string, status = 'Working'): Promise<void> {
+async function updateProgress(progressMessage: ProgressEditor, content: string, model: string, session: string, status = 'Working'): Promise<void> {
   try {
     await progressMessage.edit(getProgressPayload(content, model, session, status));
   } catch (error) {
@@ -38,10 +51,14 @@ async function updateProgress(progressMessage: Message | { edit: (payload: Retur
   }
 }
 
-export async function handleCodeCommand(message: Message, prompt: string, openCode: OpenCodeClient): Promise<void> {
-  const key = getSessionKey(message);
-  const channel = message.channel;
-  const isDeferredInteraction = typeof (message as Message & { edit?: unknown; reply?: unknown }).edit === 'function';
+export async function handleCodeCommand(
+  context: CodeExecutionContext,
+  prompt: string,
+  openCode: OpenCodeClient,
+): Promise<void> {
+  const key = getSessionKeyFromContext(context);
+  const channel = context.channel;
+  const isDeferredInteraction = 'edit' in context && typeof context.edit === 'function';
 
   if (!channel.isSendable()) return;
   if (running.has(key)) {
@@ -66,8 +83,8 @@ export async function handleCodeCommand(message: Message, prompt: string, openCo
     let sessionId = sessions.get(key);
 
     if (!sessionId) {
-      console.log(`[OpenCode] Creating session for ${message.author.tag}`);
-      const result = await openCode.createSession(`Discord - ${message.author.username}`);
+      console.log(`[OpenCode] Creating session for ${context.author.tag ?? context.author.username ?? context.author.id}`);
+      const result = await openCode.createSession(`Discord - ${context.author.username ?? context.author.id}`);
       const data = unwrapResponse(result) as Record<string, unknown> | undefined;
       sessionId = typeof data?.['id'] === 'string' ? data['id'] : undefined;
 
@@ -83,7 +100,7 @@ export async function handleCodeCommand(message: Message, prompt: string, openCo
     const model = MODELS[selectedModel];
     const modelLabel = `${model.providerID}/${model.modelID}`;
 
-    console.log(`[OpenCode] User: ${message.author.tag}`);
+    console.log(`[OpenCode] User: ${context.author.tag ?? context.author.username ?? context.author.id}`);
     console.log(`[OpenCode] Session: ${sessionId}`);
     console.log(`[OpenCode] Model: ${modelLabel}`);
     console.log(`[OpenCode] Prompt: ${prompt}`);
@@ -91,7 +108,7 @@ export async function handleCodeCommand(message: Message, prompt: string, openCo
     const promptPreview = makePromptPreview(prompt);
     const progressPayload = componentsV2Payload([
       buildAgentContainer({
-        title: 'OpenCode',
+        title: '## OpenCode Agent',
         content: ['Processing request...', '', `Prompt: \`${promptPreview}\``, '', `Model: \`${modelLabel}\``].join('\n'),
         status: 'Working',
         model: modelLabel,
@@ -99,14 +116,21 @@ export async function handleCodeCommand(message: Message, prompt: string, openCo
       }),
     ]);
 
-    const progressMessage = isDeferredInteraction
-      ? { edit: async (payload: ReturnType<typeof componentsV2Payload>) => (message as Message & { edit: (payload: ReturnType<typeof componentsV2Payload>) => Promise<unknown> }).edit(payload) }
+    const progressMessage: ProgressEditor = isDeferredInteraction
+      ? {
+          edit: async (payload) => {
+            if (!context.edit) {
+              throw new Error('Progress editor is not available.');
+            }
+            return context.edit(payload);
+          },
+        }
       : await channel.send(progressPayload);
 
-    if (isDeferredInteraction) {
-      await (progressMessage as { edit: (payload: ReturnType<typeof componentsV2Payload>) => Promise<unknown> }).edit(progressPayload);
+    if (!isDeferredInteraction) {
+      await progressMessage.edit(progressPayload);
     } else {
-      await (progressMessage as Message).edit(progressPayload);
+      await progressMessage.edit(progressPayload);
     }
 
     const progressLines = ['Sedang mengerjakan task...'];
@@ -135,22 +159,10 @@ export async function handleCodeCommand(message: Message, prompt: string, openCo
 
     const responseData = unwrapResponse(result);
     const text = extractText(responseData);
-    const errorInfo =
-      typeof responseData === 'object' && responseData !== null
-        ? (responseData as Record<string, unknown>)['info']
-        : undefined;
-    const errorPayload =
-      typeof errorInfo === 'object' && errorInfo !== null
-        ? (errorInfo as Record<string, unknown>)['error']
-        : undefined;
-    const errorName =
-      typeof errorPayload === 'object' && errorPayload !== null
-        ? (errorPayload as Record<string, unknown>)['name']
-        : undefined;
-    const errorMessage =
-      typeof errorPayload === 'object' && errorPayload !== null && 'data' in (errorPayload as Record<string, unknown>)
-        ? (errorPayload as Record<string, unknown>)['data']
-        : undefined;
+    const errorInfo = typeof responseData === 'object' && responseData !== null ? (responseData as Record<string, unknown>)['info'] : undefined;
+    const errorPayload = typeof errorInfo === 'object' && errorInfo !== null ? (errorInfo as Record<string, unknown>)['error'] : undefined;
+    const errorName = typeof errorPayload === 'object' && errorPayload !== null ? (errorPayload as Record<string, unknown>)['name'] : undefined;
+    const errorMessage = typeof errorPayload === 'object' && errorPayload !== null && 'data' in (errorPayload as Record<string, unknown>) ? (errorPayload as Record<string, unknown>)['data'] : undefined;
     const aborted = typeof errorName === 'string' && /aborted/i.test(errorName)
       || typeof errorMessage === 'object' && errorMessage !== null && 'message' in (errorMessage as Record<string, unknown>) && typeof (errorMessage as Record<string, unknown>)['message'] === 'string' && /aborted/i.test((errorMessage as Record<string, unknown>)['message'] as string);
 
@@ -168,22 +180,23 @@ export async function handleCodeCommand(message: Message, prompt: string, openCo
     await updateProgress(progressMessage, 'Request selesai.', modelLabel, sessionId, 'Completed');
 
     if (text) {
-      const replyCustomId = `opencode_reply:${message.channelId}:${sessionId}:${message.author.id}`;
       const finalPayload = componentsV2Payload([
         buildAgentContainer({
-          title: 'OpenCode',
-          content: isDeferredInteraction ? `${text.slice(0, 1600).trimEnd()}${text.length > 1600 ? '\n\n... (output dipotong karena terlalu panjang)' : ''}` : text,
+          title: '## OpenCode Agent',
+          content: text,
           status: 'Completed',
           model: modelLabel,
           session: sessionId,
         }),
-        buildReplyActionRow(replyCustomId),
       ]);
 
       if (isDeferredInteraction) {
-        await (message as Message & { edit: (payload: ReturnType<typeof componentsV2Payload>) => Promise<unknown> }).edit(finalPayload);
+        if (!context.edit) {
+          throw new Error('Reply editor is not available.');
+        }
+        await context.edit(finalPayload);
       } else {
-        await sendLongMessage(message, text, replyCustomId);
+        await sendLongMessage({ channel }, text);
       }
     } else {
       console.log('[OpenCode] No text response.');
@@ -208,7 +221,10 @@ export async function handleCodeCommand(message: Message, prompt: string, openCo
     ]);
 
     if (isDeferredInteraction) {
-      await (message as Message & { edit: (payload: ReturnType<typeof componentsV2Payload>) => Promise<unknown> }).edit(failedPayload);
+      if (!context.edit) {
+        throw error;
+      }
+      await context.edit(failedPayload);
     } else {
       await channel.send(failedPayload);
     }
