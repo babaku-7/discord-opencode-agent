@@ -1,347 +1,219 @@
 import type { Message } from 'discord.js';
 
 import { MODELS } from '../models.js';
-
-import {
-  running,
-  selectedModels,
-  sessions,
-} from '../state.js';
-
+import { DEFAULT_MODEL, running, selectedModels, sessions } from '../state.js';
 import { OpenCodeClient } from '../opencode/client.js';
-
+import { OpenCodeEvents, type OpenCodeProgress } from '../opencode/events.js';
 import {
+  buildAgentContainer,
+  buildReplyActionRow,
+  componentsV2Payload,
   extractText,
   getSessionKey,
   sendLongMessage,
   unwrapResponse,
 } from '../utils/discord.js';
 
-import {
-  OpenCodeEvents,
-  type OpenCodeProgress,
-} from '../opencode/events.js';
-
-function formatProgress(
-  lines: string[],
-): string {
-  const header =
-    '**OpenCode Agent**\n\n';
-
-  const body =
-    lines
-      .slice(-8)
-      .join('\n');
-
-  return `${header}${body}`;
+function getProgressPayload(content: string, model: string, session: string, status = 'Working'): ReturnType<typeof componentsV2Payload> {
+  return componentsV2Payload([
+    buildAgentContainer({
+      title: '## OpenCode Agent',
+      content,
+      status,
+      model,
+      session,
+    }),
+  ]);
 }
 
-async function updateProgress(
-  progressMessage: Message,
-  lines: string[],
-): Promise<void> {
+function makePromptPreview(prompt: string): string {
+  return prompt.length > 180 ? `${prompt.slice(0, 177).trimEnd()}...` : prompt;
+}
+
+async function updateProgress(progressMessage: Message | { edit: (payload: ReturnType<typeof componentsV2Payload>) => Promise<unknown> }, content: string, model: string, session: string, status = 'Working'): Promise<void> {
   try {
-    await progressMessage.edit(
-      formatProgress(lines),
-    );
+    await progressMessage.edit(getProgressPayload(content, model, session, status));
   } catch (error) {
-    console.error(
-      '[Discord Progress]',
-      error,
-    );
+    console.error('[Discord Progress]', error);
   }
 }
 
-export async function handleCodeCommand(
-  message: Message,
-  prompt: string,
-  openCode: OpenCodeClient,
-): Promise<void> {
-  const key =
-    getSessionKey(message);
+export async function handleCodeCommand(message: Message, prompt: string, openCode: OpenCodeClient): Promise<void> {
+  const key = getSessionKey(message);
+  const channel = message.channel;
+  const isDeferredInteraction = typeof (message as Message & { edit?: unknown; reply?: unknown }).edit === 'function';
 
-  const channel =
-    message.channel;
-
-  if (!channel.isSendable()) {
-    return;
-  }
-
+  if (!channel.isSendable()) return;
   if (running.has(key)) {
     await channel.send(
-      '⏳ Task sebelumnya masih berjalan. Gunakan `!abort` untuk menghentikannya.',
+      componentsV2Payload([
+        buildAgentContainer({
+          title: '## OpenCode Agent',
+          content: 'Task sebelumnya masih berjalan. Gunakan `!abort` untuk menghentikannya.',
+          status: 'Working',
+        }),
+      ]),
     );
     return;
   }
 
   running.add(key);
-
-  let stopEvents:
-    | (() => void)
-    | undefined;
+  let stopEvents: (() => void) | undefined;
 
   try {
     await channel.sendTyping();
 
-    /*
-     * Get/create session.
-     */
-    let sessionId =
-      sessions.get(key);
+    let sessionId = sessions.get(key);
 
     if (!sessionId) {
-      console.log(
-        `[OpenCode] Creating session for ${message.author.tag}`,
-      );
-
-      const result =
-        await openCode.createSession(
-          `Discord - ${message.author.username}`,
-        );
-
-      const data =
-        unwrapResponse(result) as
-          | Record<string, unknown>
-          | undefined;
-
-      sessionId =
-        typeof data?.['id'] ===
-        'string'
-          ? data['id']
-          : undefined;
+      console.log(`[OpenCode] Creating session for ${message.author.tag}`);
+      const result = await openCode.createSession(`Discord - ${message.author.username}`);
+      const data = unwrapResponse(result) as Record<string, unknown> | undefined;
+      sessionId = typeof data?.['id'] === 'string' ? data['id'] : undefined;
 
       if (!sessionId) {
-        throw new Error(
-          'OpenCode tidak mengembalikan session ID.',
-        );
+        throw new Error('OpenCode tidak mengembalikan session ID.');
       }
 
-      sessions.set(
-        key,
-        sessionId,
-      );
-
-      console.log(
-        `[OpenCode] Session created: ${sessionId}`,
-      );
+      sessions.set(key, sessionId);
+      console.log(`[OpenCode] Session created: ${sessionId}`);
     }
 
-    const selectedModel =
-      selectedModels.get(key) ??
-      'cohere';
+    const selectedModel = selectedModels.get(key) ?? DEFAULT_MODEL;
+    const model = MODELS[selectedModel];
+    const modelLabel = `${model.providerID}/${model.modelID}`;
 
-    const model =
-      MODELS[selectedModel];
+    console.log(`[OpenCode] User: ${message.author.tag}`);
+    console.log(`[OpenCode] Session: ${sessionId}`);
+    console.log(`[OpenCode] Model: ${modelLabel}`);
+    console.log(`[OpenCode] Prompt: ${prompt}`);
 
-    console.log(
-      `[OpenCode] User: ${message.author.tag}`,
-    );
+    const promptPreview = makePromptPreview(prompt);
+    const progressPayload = componentsV2Payload([
+      buildAgentContainer({
+        title: 'OpenCode',
+        content: ['Processing request...', '', `Prompt: \`${promptPreview}\``, '', `Model: \`${modelLabel}\``].join('\n'),
+        status: 'Working',
+        model: modelLabel,
+        session: sessionId,
+      }),
+    ]);
 
-    console.log(
-      `[OpenCode] Session: ${sessionId}`,
-    );
+    const progressMessage = isDeferredInteraction
+      ? { edit: async (payload: ReturnType<typeof componentsV2Payload>) => (message as Message & { edit: (payload: ReturnType<typeof componentsV2Payload>) => Promise<unknown> }).edit(payload) }
+      : await channel.send(progressPayload);
 
-    console.log(
-      `[OpenCode] Model: ${model.providerID}/${model.modelID}`,
-    );
+    if (isDeferredInteraction) {
+      await (progressMessage as { edit: (payload: ReturnType<typeof componentsV2Payload>) => Promise<unknown> }).edit(progressPayload);
+    } else {
+      await (progressMessage as Message).edit(progressPayload);
+    }
 
-    console.log(
-      `[OpenCode] Prompt: ${prompt}`,
-    );
+    const progressLines = ['Sedang mengerjakan task...'];
+    const eventClient = new OpenCodeEvents(process.env['OPENCODE_URL'] ?? 'http://127.0.0.1:4096');
 
-    /*
-     * Create progress message BEFORE
-     * starting the OpenCode request.
-     */
-    const progressMessage =
-      await channel.send(
-        [
-          '**OpenCode Agent**',
-          '',
-          '⏳ Agent sedang bekerja...',
-          '',
-          `Model: \`${model.providerID}/${model.modelID}\``,
-        ].join('\n'),
-      );
-
-    const progressLines: string[] =
-      [
-        '⏳ Agent sedang bekerja...',
-      ];
-
-    /*
-     * Subscribe BEFORE prompt.
-     *
-     * This is important so we don't miss
-     * early events.
-     */
-    const eventClient =
-      new OpenCodeEvents(
-        process.env['OPENCODE_URL'] ??
-          'http://127.0.0.1:4096',
-      );
-
-    let updateTimer:
-      ReturnType<
-        typeof setTimeout
-      > | undefined;
-
+    let updateTimer: ReturnType<typeof setTimeout> | undefined;
     let updateQueued = false;
 
-    const onProgress = (
-      progress: OpenCodeProgress,
-    ) => {
-      progressLines.push(
-        progress.message,
-      );
-
-      /*
-       * Avoid editing Discord message
-       * on every event.
-       *
-       * Maximum one update / 750ms.
-       */
-      if (updateQueued) {
-        return;
-      }
+    const onProgress = (progress: OpenCodeProgress) => {
+      progressLines.push(progress.message);
+      if (updateQueued) return;
 
       updateQueued = true;
-
-      updateTimer =
-        setTimeout(
-          async () => {
-            updateQueued =
-              false;
-
-            await updateProgress(
-              progressMessage,
-              progressLines,
-            );
-          },
-          750,
-        );
+      updateTimer = setTimeout(async () => {
+        updateQueued = false;
+        const latest = progressLines.slice(-8).join('\n');
+        await updateProgress(progressMessage, latest, modelLabel, sessionId);
+      }, 750);
     };
 
-    stopEvents =
-      await eventClient.watchSession(
-        sessionId,
-        onProgress,
-      );
+    stopEvents = await eventClient.watchSession(sessionId, onProgress);
 
-    /*
-     * Start agent.
-     */
-    const result =
-      await openCode.sendPrompt(
-        sessionId,
-        prompt,
-        selectedModel,
-      );
+    const result = await openCode.sendPrompt(sessionId, prompt, selectedModel);
 
-    /*
-     * Give trailing SSE events a
-     * moment to arrive.
-     */
-    await new Promise(
-      (resolve) =>
-        setTimeout(
-          resolve,
-          500,
-        ),
-    );
+    await new Promise((resolve) => setTimeout(resolve, 500));
 
-    const responseData =
-      unwrapResponse(result);
+    const responseData = unwrapResponse(result);
+    const text = extractText(responseData);
+    const errorInfo =
+      typeof responseData === 'object' && responseData !== null
+        ? (responseData as Record<string, unknown>)['info']
+        : undefined;
+    const errorPayload =
+      typeof errorInfo === 'object' && errorInfo !== null
+        ? (errorInfo as Record<string, unknown>)['error']
+        : undefined;
+    const errorName =
+      typeof errorPayload === 'object' && errorPayload !== null
+        ? (errorPayload as Record<string, unknown>)['name']
+        : undefined;
+    const errorMessage =
+      typeof errorPayload === 'object' && errorPayload !== null && 'data' in (errorPayload as Record<string, unknown>)
+        ? (errorPayload as Record<string, unknown>)['data']
+        : undefined;
+    const aborted = typeof errorName === 'string' && /aborted/i.test(errorName)
+      || typeof errorMessage === 'object' && errorMessage !== null && 'message' in (errorMessage as Record<string, unknown>) && typeof (errorMessage as Record<string, unknown>)['message'] === 'string' && /aborted/i.test((errorMessage as Record<string, unknown>)['message'] as string);
 
-    const text =
-      extractText(
-        responseData,
-      );
-
-    /*
-     * Stop SSE watcher.
-     */
     stopEvents();
-    stopEvents =
-      undefined;
+    stopEvents = undefined;
 
-    if (updateTimer) {
-      clearTimeout(
-        updateTimer,
-      );
+    if (updateTimer) clearTimeout(updateTimer);
+
+    if (aborted) {
+      await updateProgress(progressMessage, 'Request dibatalkan.', modelLabel, sessionId, 'Aborted');
+      console.log('[OpenCode] Request aborted by OpenCode:', JSON.stringify(responseData, null, 2));
+      return;
     }
 
-    /*
-     * Final progress.
-     */
-    progressLines.push(
-      '✅ Task selesai.',
-    );
+    await updateProgress(progressMessage, 'Request selesai.', modelLabel, sessionId, 'Completed');
 
-    await updateProgress(
-      progressMessage,
-      progressLines,
-    );
-
-    /*
-     * Send final textual answer
-     * if OpenCode produced one.
-     */
     if (text) {
-      await sendLongMessage(
-        message,
-        text,
-      );
-    } else {
-      /*
-       * Tool-based tasks may finish
-       * without assistant text.
-       */
-      console.log(
-        '[OpenCode] No text response.',
-      );
+      const replyCustomId = `opencode_reply:${message.channelId}:${sessionId}:${message.author.id}`;
+      const finalPayload = componentsV2Payload([
+        buildAgentContainer({
+          title: 'OpenCode',
+          content: isDeferredInteraction ? `${text.slice(0, 1600).trimEnd()}${text.length > 1600 ? '\n\n... (output dipotong karena terlalu panjang)' : ''}` : text,
+          status: 'Completed',
+          model: modelLabel,
+          session: sessionId,
+        }),
+        buildReplyActionRow(replyCustomId),
+      ]);
 
-      console.log(
-        '[OpenCode] Raw response:',
-        JSON.stringify(
-          responseData,
-          null,
-          2,
-        ),
-      );
+      if (isDeferredInteraction) {
+        await (message as Message & { edit: (payload: ReturnType<typeof componentsV2Payload>) => Promise<unknown> }).edit(finalPayload);
+      } else {
+        await sendLongMessage(message, text, replyCustomId);
+      }
+    } else {
+      console.log('[OpenCode] No text response.');
+      console.log('[OpenCode] Raw response:', JSON.stringify(responseData, null, 2));
     }
   } catch (error) {
-    console.error(
-      '[OpenCode Error]',
-      error,
-    );
+    console.error('[OpenCode Error]', error);
 
-    if (stopEvents) {
-      stopEvents();
+    if (stopEvents) stopEvents();
+
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const safeText = errorMessage
+      .replace(/(Authorization|authorization|token|secret|password|key)\s*[:=]\s*[^\s]+/gi, '[redacted]')
+      .slice(0, 900);
+
+    const failedPayload = componentsV2Payload([
+      buildAgentContainer({
+        title: '## OpenCode Agent',
+        content: `Request gagal.\n\n${safeText}`,
+        status: 'Failed',
+      }),
+    ]);
+
+    if (isDeferredInteraction) {
+      await (message as Message & { edit: (payload: ReturnType<typeof componentsV2Payload>) => Promise<unknown> }).edit(failedPayload);
+    } else {
+      await channel.send(failedPayload);
     }
-
-    const errorMessage =
-      error instanceof Error
-        ? error.message
-        : String(error);
-
-    await channel.send(
-      [
-        '❌ **OpenCode Error**',
-        '',
-        '```',
-        errorMessage.slice(
-          0,
-          1800,
-        ),
-        '```',
-      ].join('\n'),
-    );
   } finally {
-    if (stopEvents) {
-      stopEvents();
-    }
-
+    if (stopEvents) stopEvents();
     running.delete(key);
   }
 }

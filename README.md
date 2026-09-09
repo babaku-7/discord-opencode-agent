@@ -1,122 +1,72 @@
 # Discord OpenCode Agent
 
-A Discord coding agent powered by [OpenCode](https://opencode.ai/).
+Discord bot front-end for an OpenCode coding agent.
 
-This project allows authorized Discord users to send coding tasks directly to an OpenCode coding agent through Discord.
+This project lets authorized users run coding tasks from Discord, reuse OpenCode sessions, switch models, and monitor progress in a cleaner Discord interface.
 
-The agent can work with multiple AI models through OpenCode, currently supporting:
+## Highlights
+
+- Discord command interface for OpenCode
+- Discord Components V2 message layout
+- Live progress updates while a task is running
+- Support for both `!` commands and slash commands
+- Session reuse and reset support
+- Model switching in Discord
+- Long response handling without noisy multi-message spam
+
+## Supported models
 
 - Cohere North Mini Code
 - Google Gemini 3.1 Flash-Lite
 
-## Features
+## Command set
 
--  Discord coding agent
--  OpenCode integration
--  Cohere North Mini Code
--  Google Gemini 3.1 Flash-Lite
--  Switch AI models directly from Discord
--  Live OpenCode agent progress
--  Discord user authorization
--  Configurable workspace
--  Runtime OpenCode sessions
--  Abort running tasks
--  Reset sessions
--  Agent/session status
--  Automatic handling of long Discord responses
--  TypeScript
--  Node.js 22+
-
-
-## Models
-
-### Cohere
-
-```text
-Provider: cohere
-Model: north-mini-code-1-0
-Name: Cohere North Mini Code
-```
-
-### Google
-
-```text
-Provider: google
-Model: gemini-3.1-flash-lite
-Name: Google Gemini 3.1 Flash-Lite
-```
-
-The model can be changed directly from Discord:
-
-```text
-!model cohere
-```
-
-or:
-
-```text
-!model gemini
-```
-
-## Commands
+Classic commands:
 
 | Command | Description |
 |---|---|
-| `!code <task>` | Send a coding task to OpenCode |
-| `!model` | Show the currently selected model |
-| `!model cohere` | Use Cohere North Mini Code |
-| `!model gemini` | Use Google Gemini 3.1 Flash-Lite |
-| `!status` | Show the current agent/session status |
-| `!reset` | Reset the current OpenCode session |
-| `!abort` | Abort the current OpenCode task |
+| `!code <prompt>` | Run a request through OpenCode |
+| `!model` | Show the active model |
+| `!model cohere` | Switch to Cohere |
+| `!model gemini` | Switch to Gemini |
+| `!status` | Show bot and session status |
+| `!session` | Show the current session |
+| `!reset` | Reset the session |
+| `!abort` | Abort the active task |
 | `!help` | Show available commands |
 
-### Example
+Slash commands:
 
-```text
-!code buat file hello.txt berisi Hello World
-```
+| Command | Description |
+|---|---|
+| `/code <prompt>` | Run a request through OpenCode |
+| `/model` | Show or change the active model |
+| `/status` | Show the current status |
+| `/session` | Show the current session |
+| `/reset` | Reset the current session |
+| `/abort` | Abort the active task |
+| `/help` | Show available commands |
 
-The agent sends the task to OpenCode and works inside the configured workspace.
+## Components V2 update
 
-## Live Progress
+The bot now uses Discord Components V2 for most response cards and status output. This keeps the interface more modern and consistent, especially for status panels, live work updates, and long text output.
 
-The agent receives OpenCode events through the OpenCode event stream.
+Key points:
 
-While a task is running, the Discord bot updates a progress message instead of sending a new Discord message for every event.
-
-Example:
-
-```text
-🤖 OpenCode Agent
-
-🔧 write sedang berjalan...
-✅ write → gemini-test.txt
-🔧 bash sedang berjalan...
-✅ bash → npm run build
-✅ Task selesai.
-```
+- response payloads use `MessageFlags.IsComponentsV2`
+- status and session panels are rendered in container format
+- long output is collapsed into a single safe Discord message instead of flooding the channel
+- slash commands are registered to a guild when `DISCORD_GUILD_ID` is set, which makes them appear faster in a specific server
 
 ## Requirements
 
-Before running the project, make sure you have:
-
-- Node.js 22.x
+- Node.js 22+
 - npm
-- Git
-- A Discord application and bot
-- OpenCode
-- A configured OpenCode provider/model
-- Cohere and/or Google credentials configured in OpenCode
+- Discord bot token
+- OpenCode running locally or on a reachable host
+- A valid OpenCode model/provider configured in the OpenCode environment
 
-## Installation
-
-Clone the repository:
-
-```bash
-git clone https://github.com/YOUR_USERNAME/discord-opencode-agent.git
-cd discord-opencode-agent
-```
+## Setup
 
 Install dependencies:
 
@@ -124,74 +74,23 @@ Install dependencies:
 npm install
 ```
 
-Create the environment file:
+Copy the environment file:
 
 ```bash
 cp .env.example .env
 ```
 
-Edit the environment variables:
-
-```bash
-nano .env
-```
-
-## Environment Variables
+Update `.env` with your values:
 
 ```env
 DISCORD_BOT_TOKEN=your_discord_bot_token
+DISCORD_GUILD_ID=
 ALLOWED_USER_IDS=your_discord_user_id
 OPENCODE_URL=http://127.0.0.1:4096
 OPENCODE_WORKSPACE=/home/your-user/ai-workspace/projects
 ```
 
-### DISCORD_BOT_TOKEN
-
-Your Discord bot token.
-
-Never commit your real bot token to Git.
-
-### ALLOWED_USER_IDS
-
-Discord user IDs allowed to use the coding agent.
-
-Single user:
-
-```env
-ALLOWED_USER_IDS=123456789012345678
-```
-
-Multiple users:
-
-```env
-ALLOWED_USER_IDS=123456789012345678,987654321098765432
-```
-
-Users not listed here will be rejected by the bot.
-
-### OPENCODE_URL
-
-The URL of the OpenCode server.
-
-Default:
-
-```env
-OPENCODE_URL=http://127.0.0.1:4096
-```
-
-### OPENCODE_WORKSPACE
-
-The directory passed to OpenCode as its working directory.
-
-Example:
-
-```env
-OPENCODE_WORKSPACE=/home/your-user/ai-workspace/projects
-```
-
-Use an absolute path.
-
-## OpenCode Setup
+## OpenCode setup
 
 Start the OpenCode server:
 
@@ -199,26 +98,25 @@ Start the OpenCode server:
 opencode serve --hostname 127.0.0.1 --port 4096
 ```
 
-Verify that OpenCode is running:
+Check the health endpoint:
 
 ```bash
 curl -s http://127.0.0.1:4096/global/health
 ```
 
-A healthy server should return something similar to:
+If the service is healthy, the bot can connect to it and begin processing requests.
 
-```json
-{
-  "healthy": true,
-  "version": "1.18.18"
-}
-```
-
-Check available models:
+## Run the bot
 
 ```bash
-opencode models
+npm start
 ```
+
+## Notes
+
+- `ALLOWED_USER_IDS` controls which Discord users can access the bot.
+- If slash commands are not appearing immediately, set `DISCORD_GUILD_ID` to the target guild ID and restart the bot.
+- The OpenCode server must stay running before the Discord bot can work correctly.
 
 The project currently uses:
 

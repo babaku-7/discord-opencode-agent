@@ -13,4 +13,5 @@ export const config = {
   allowedUsers,
   opencodeUrl: process.env['OPENCODE_URL'] ?? 'http://127.0.0.1:4096',
   workspace: process.env['OPENCODE_WORKSPACE'] ?? '/home/babaku/ai-workspace/projects',
+  discordGuildId: process.env['DISCORD_GUILD_ID']?.trim() || undefined,
 } as const;

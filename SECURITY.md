@@ -6,8 +6,8 @@ Security fixes are currently provided for the latest version of the project.
 
 | Version | Supported |
 | ------- | --------- |
-| Latest  | ✅ |
-| Older   | ❌ |
+| Latest  | Yes |
+| Older   | No |
 
 ## Reporting a Vulnerability
 

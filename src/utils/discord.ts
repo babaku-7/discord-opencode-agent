@@ -1,4 +1,7 @@
-import type { Message } from 'discord.js';
+import type { APIMessageTopLevelComponent, Message } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, SeparatorSpacingSize } from 'discord.js';
+import { ContainerBuilder, SeparatorBuilder, TextDisplayBuilder } from '@discordjs/builders';
+import type { JSONEncodable } from '@discordjs/util';
 
 export function getSessionKey(message: Message): string {
   return [message.guildId ?? 'dm', message.channelId, message.author.id].join(':');
@@ -24,11 +27,15 @@ export function extractText(data: unknown): string {
   const parts = value['parts'];
 
   if (Array.isArray(parts)) {
-    const text = parts.map((part) => {
-      if (!part || typeof part !== 'object') return '';
-      const item = part as Record<string, unknown>;
-      return item['type'] === 'text' && typeof item['text'] === 'string' ? item['text'] : '';
-    }).filter(Boolean).join('\n').trim();
+    const text = parts
+      .map((part) => {
+        if (!part || typeof part !== 'object') return '';
+        const item = part as Record<string, unknown>;
+        return item['type'] === 'text' && typeof item['text'] === 'string' ? item['text'] : '';
+      })
+      .filter(Boolean)
+      .join('\n')
+      .trim();
     if (text) return text;
   }
 
@@ -38,8 +45,142 @@ export function extractText(data: unknown): string {
   return '';
 }
 
-export async function sendLongMessage(message: Message, text: string): Promise<void> {
+function normalizeTitle(title: string): string {
+  return title.replace(/^#+\s*/, '').trim();
+}
+
+export function buildAgentContainer({
+  title = 'OpenCode',
+  content = '',
+  status,
+  model,
+  session,
+  tool,
+}: {
+  title?: string;
+  content?: string;
+  status?: string;
+  model?: string;
+  session?: string;
+  tool?: string;
+}): ContainerBuilder {
+  const cleanedTitle = normalizeTitle(title);
+  const body = content.trim();
+  const metadata: string[] = [];
+
+  if (status) metadata.push(`Status: ${status}`);
+  if (model) metadata.push(`Model: ${model}`);
+  if (session) metadata.push(`Session: ${session}`);
+  if (tool) metadata.push(`Tool: ${tool}`);
+
+  const container = new ContainerBuilder().setAccentColor(0x5865f2);
+
+  if (cleanedTitle && cleanedTitle !== 'OpenCode') {
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cleanedTitle));
+  }
+
+  if (body) {
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(body));
+  }
+
+  if (metadata.length > 0) {
+    container.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small));
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(metadata.join(' • ')));
+  }
+
+  return container;
+}
+
+export function splitLongText(text: string, maxLength = 1800): string[] {
+  const normalized = text.replace(/\r\n/g, '\n').trim();
+  if (!normalized) return [];
+
+  const paragraphs = normalized.split(/\n{2,}/);
+  const chunks: string[] = [];
+  let current = '';
+
+  for (const paragraph of paragraphs) {
+    const candidate = current ? `${current}\n\n${paragraph}` : paragraph;
+
+    if (candidate.length <= maxLength) {
+      current = candidate;
+      continue;
+    }
+
+    if (current) {
+      chunks.push(current.trim());
+      current = '';
+    }
+
+    const lines = paragraph.split('\n');
+    for (const line of lines) {
+      const next = current ? `${current}\n${line}` : line;
+      if (next.length <= maxLength) {
+        current = next;
+        continue;
+      }
+
+      if (current) {
+        chunks.push(current.trim());
+        current = '';
+      }
+
+      let segment = line;
+      while (segment.length > maxLength) {
+        const cut = segment.slice(0, maxLength).lastIndexOf(' ');
+        const splitAt = cut > 0 ? cut : maxLength;
+        chunks.push(segment.slice(0, splitAt).trim());
+        segment = segment.slice(splitAt).trimStart();
+      }
+
+      current = segment;
+    }
+  }
+
+  if (current.trim()) {
+    chunks.push(current.trim());
+  }
+
+  return chunks.filter(Boolean);
+}
+
+export function componentsV2Payload<const T extends JSONEncodable<APIMessageTopLevelComponent>>(
+  components: readonly T[],
+): {
+  components: readonly T[];
+  flags: MessageFlags.IsComponentsV2;
+} {
+  return { components, flags: MessageFlags.IsComponentsV2 };
+}
+
+export function buildReplyActionRow(customId: string): ActionRowBuilder<ButtonBuilder> {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(customId)
+      .setLabel('Reply')
+      .setStyle(ButtonStyle.Primary),
+  );
+}
+
+export async function sendLongMessage(message: Message, text: string, customId?: string): Promise<void> {
   const channel = message.channel;
   if (!channel.isSendable()) return;
-  for (let i = 0; i < text.length; i += 1900) await channel.send(text.slice(i, i + 1900));
+
+  const safeText = text.trim();
+  if (!safeText) return;
+
+  const chunks = splitLongText(safeText, 1800);
+
+  for (const chunk of chunks) {
+    const payload = componentsV2Payload([
+      buildAgentContainer({
+        title: '## OpenCode Agent',
+        content: chunk,
+        status: 'Completed',
+      }),
+      ...(customId ? [buildReplyActionRow(customId)] : []),
+    ]);
+
+    await channel.send(payload);
+  }
 }
