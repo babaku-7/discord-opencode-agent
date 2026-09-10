@@ -1,22 +1,30 @@
 import type { Message } from 'discord.js';
 import { MODELS } from '../models.js';
-import { running, selectedModels, sessions } from '../state.js';
+import { DEFAULT_MODEL, running, selectedModels, sessions } from '../state.js';
 import { OpenCodeClient } from '../opencode/client.js';
-import { getSessionKey } from '../utils/discord.js';
+import { buildAgentContainer, componentsV2Payload, getSessionKey } from '../utils/discord.js';
 
 export async function handleStatusCommand(message: Message, openCode: OpenCodeClient): Promise<void> {
   const key = getSessionKey(message);
   const sessionId = sessions.get(key);
-  const selected = selectedModels.get(key) ?? 'cohere';
+  const selected = selectedModels.get(key) ?? DEFAULT_MODEL;
   const model = MODELS[selected];
-  await message.reply([
-    '**Agent Status**', '',
-    `Status: ${sessionId ? '🟢 Session active' : '⚪ No session'}`,
-    `Session: \`${sessionId ?? 'none'}\``,
-    `Running: \`${running.has(key)}\``, '',
-    `Provider: \`${model.providerID}\``,
-    `Model: \`${model.modelID}\``,
-    `Name: **${model.label}**`, '',
-    `Workspace: \`${openCode.getWorkspace()}\``,
-  ].join('\n'));
+
+  const openCodeState = running.has(key) ? 'Busy' : sessionId ? 'Idle' : 'Offline';
+
+  await message.reply(
+    componentsV2Payload([
+      buildAgentContainer({
+        title: '## Agent Status',
+        content: [
+          `Status: ${sessionId ? 'Online' : 'Offline'}`,
+          `OpenCode: ${openCodeState}`,
+          `Workspace: \`${openCode.getWorkspace()}\``,
+        ].join('\n'),
+        status: running.has(key) ? 'Working' : sessionId ? 'Ready' : 'Idle',
+        model: `${model.providerID}/${model.modelID}`,
+        session: sessionId ?? 'none',
+      }),
+    ]),
+  );
 }

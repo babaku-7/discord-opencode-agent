@@ -5,6 +5,40 @@ export interface OpenCodeProgress {
   message: string;
 }
 
+function humanizeToolName(tool: string): string {
+  switch (tool.toLowerCase()) {
+    case 'read':
+      return 'membaca file';
+    case 'write':
+      return 'menulis file';
+    case 'bash':
+    case 'shell':
+      return 'menjalankan perintah';
+    case 'edit':
+      return 'mengedit file';
+    case 'grep':
+      return 'mencari kode';
+    case 'search':
+      return 'mencari referensi';
+    default:
+      return tool;
+  }
+}
+
+function formatToolMessage(tool: string, status: 'running' | 'completed' | 'error', details?: string): string {
+  const label = humanizeToolName(tool);
+
+  if (status === 'running') {
+    return `${label} sedang berjalan${details ? `: ${details}` : '...'}`;
+  }
+
+  if (status === 'completed') {
+    return `${label} selesai${details ? `: ${details}` : ''}`;
+  }
+
+  return `${label} gagal${details ? `: ${details}` : ''}`;
+}
+
 export class OpenCodeEvents {
   private readonly client;
 
@@ -70,9 +104,6 @@ export class OpenCodeEvents {
       return;
     }
 
-    /*
-     * Tool progress.
-     */
     if (
       event.type ===
       'message.part.updated'
@@ -93,9 +124,14 @@ export class OpenCodeEvents {
       ) {
         const tool =
           part.tool ?? 'tool';
-
         const state =
           part.state;
+        const detail =
+          typeof state?.title === 'string'
+            ? state.title
+            : typeof state?.summary === 'string'
+              ? state.summary
+              : undefined;
 
         if (
           state?.status ===
@@ -103,8 +139,7 @@ export class OpenCodeEvents {
         ) {
           onProgress({
             type: 'tool',
-            message:
-              `🔧 ${tool} sedang berjalan...`,
+            message: formatToolMessage(tool, 'running', detail),
           });
         }
 
@@ -112,14 +147,9 @@ export class OpenCodeEvents {
           state?.status ===
           'completed'
         ) {
-          const title =
-            state.title ||
-            tool;
-
           onProgress({
             type: 'tool',
-            message:
-              `✅ ${tool} → ${title}`,
+            message: formatToolMessage(tool, 'completed', detail),
           });
         }
 
@@ -129,8 +159,7 @@ export class OpenCodeEvents {
         ) {
           onProgress({
             type: 'tool',
-            message:
-              `❌ ${tool} gagal`,
+            message: formatToolMessage(tool, 'error', detail),
           });
         }
       }
@@ -138,9 +167,6 @@ export class OpenCodeEvents {
       return;
     }
 
-    /*
-     * Session status.
-     */
     if (
       event.type ===
       'session.status'
@@ -166,7 +192,7 @@ export class OpenCodeEvents {
         onProgress({
           type: 'status',
           message:
-            '🤖 Agent sedang bekerja...',
+            'Agent sedang menganalisis dan menyiapkan solusi...',
         });
       }
 
@@ -177,7 +203,7 @@ export class OpenCodeEvents {
         onProgress({
           type: 'status',
           message:
-            '✅ Agent selesai.',
+            'Agent selesai dan siap mengirim hasil.',
         });
       }
     }
