@@ -8,6 +8,16 @@ const allowedUsers = new Set(
 );
 if (!allowedUsers.size) throw new Error('ALLOWED_USER_IDS is required.');
 
+let commandPrefix = process.env['DISCORD_PREFIX']?.trim() || '!';
+
+export function getCommandPrefix(): string {
+  return commandPrefix;
+}
+
+export function setCommandPrefix(prefix: string): void {
+  commandPrefix = prefix;
+}
+
 export const config = {
   discordBotToken: token,
   allowedUsers,

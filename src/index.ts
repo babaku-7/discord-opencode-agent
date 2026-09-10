@@ -1,5 +1,5 @@
 import { ActionRowBuilder, Client, GatewayIntentBits, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle, type ChatInputCommandInteraction } from 'discord.js';
-import { config } from './config.js';
+import { config, getCommandPrefix, setCommandPrefix } from './config.js';
 import { OpenCodeClient } from './opencode/client.js';
 import { handleCodeCommand } from './commands/code.js';
 import { handleModelCommand } from './commands/model.js';
@@ -132,7 +132,8 @@ client.on('messageCreate', async (message) => {
   try {
     if (message.author.bot) return;
     const content = message.content.trim();
-    if (!content.startsWith('!')) return;
+    const prefix = getCommandPrefix();
+    if (!content.startsWith(prefix)) return;
     if (!isAuthorized(message, config.allowedUsers)) {
       await message.reply(
         componentsV2Payload([
@@ -147,9 +148,10 @@ client.on('messageCreate', async (message) => {
       return;
     }
 
-    const space = content.indexOf(' ');
-    const command = (space === -1 ? content.slice(1) : content.slice(1, space)).toLowerCase();
-    const args = space === -1 ? '' : content.slice(space + 1).trim();
+    const commandText = content.slice(prefix.length);
+    const space = commandText.indexOf(' ');
+    const command = (space === -1 ? commandText : commandText.slice(0, space)).toLowerCase();
+    const args = space === -1 ? '' : commandText.slice(space + 1).trim();
 
     switch (command) {
       case 'code':
@@ -158,7 +160,7 @@ client.on('messageCreate', async (message) => {
             componentsV2Payload([
               buildAgentContainer({
                 title: '## OpenCode Agent',
-                content: 'Gunakan: `!code <task>`',
+                content: `Gunakan: \`${prefix}code <task>\``,
                 status: 'Idle',
               }),
             ]),
@@ -183,8 +185,35 @@ client.on('messageCreate', async (message) => {
         await handleAbortCommand(message, openCode);
         break;
       case 'help':
-        await handleHelpCommand(message);
+        await handleHelpCommand(message, prefix);
         break;
+      case 'prefix': {
+        const nextPrefix = args.trim();
+        if (!nextPrefix || nextPrefix.length > 3 || /\s/.test(nextPrefix)) {
+          await message.reply(
+            componentsV2Payload([
+              buildAgentContainer({
+                title: '## OpenCode Agent',
+                content: `Gunakan: \`${prefix}prefix <prefix>\`\nContoh: \`${prefix}prefix ?\``,
+                status: 'Idle',
+              }),
+            ]),
+          );
+          return;
+        }
+
+        setCommandPrefix(nextPrefix);
+        await message.reply(
+          componentsV2Payload([
+            buildAgentContainer({
+              title: '## OpenCode Agent',
+              content: `Prefix berhasil diubah ke \`${nextPrefix}\`.`,
+              status: 'Ready',
+            }),
+          ]),
+        );
+        break;
+      }
       default:
         break;
     }

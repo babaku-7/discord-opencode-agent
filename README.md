@@ -77,6 +77,7 @@ cp .env.example .env
 
 ```env
 DISCORD_BOT_TOKEN=your_discord_bot_token
+DISCORD_PREFIX=!
 DISCORD_GUILD_ID=
 ALLOWED_USER_IDS=your_discord_user_id
 OPENCODE_URL=http://127.0.0.1:4096
@@ -86,6 +87,7 @@ OPENCODE_WORKSPACE=/home/your-user/ai-workspace/projects
 Important notes:
 
 - `DISCORD_BOT_TOKEN` is the token from your Discord application.
+- `DISCORD_PREFIX` controls the prefix for legacy commands such as `!code`; it defaults to `!`.
 - `DISCORD_GUILD_ID` is optional; when set, slash commands register faster in that guild.
 - `ALLOWED_USER_IDS` restricts access to the approved Discord user IDs.
 - `OPENCODE_URL` must point to the running OpenCode server.

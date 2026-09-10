@@ -1,7 +1,7 @@
 import type { Message } from 'discord.js';
 import { buildAgentContainer, componentsV2Payload } from '../utils/discord.js';
 
-export async function handleHelpCommand(message: Message): Promise<void> {
+export async function handleHelpCommand(message: Message, prefix = '!'): Promise<void> {
   await message.reply(
     componentsV2Payload([
       buildAgentContainer({
@@ -9,13 +9,14 @@ export async function handleHelpCommand(message: Message): Promise<void> {
         content: [
           'Available commands:',
           '',
-          '`!code <prompt>` — Menjalankan request ke OpenCode.',
-          '`!model` — Melihat model aktif.',
-          '`!status` — Melihat status agent.',
-          '`!session` — Melihat session aktif.',
-          '`!reset` — Reset session.',
-          '`!abort` — Membatalkan request aktif.',
-          '`!help` — Menampilkan bantuan.',
+          `\`${prefix}code <prompt>\` — Menjalankan request ke OpenCode.`,
+          `\`${prefix}model\` — Melihat model aktif.`,
+          `\`${prefix}status\` — Melihat status agent.`,
+          `\`${prefix}session\` — Melihat session aktif.`,
+          `\`${prefix}reset\` — Reset session.`,
+          `\`${prefix}abort\` — Membatalkan request aktif.`,
+          `\`${prefix}help\` — Menampilkan bantuan.`,
+          `\`${prefix}prefix <prefix>\` — Mengubah prefix command.`,
         ].join('\n'),
         status: 'Ready',
       }),
