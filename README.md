@@ -87,7 +87,11 @@ OPENCODE_WORKSPACE=/home/your-user/ai-workspace/projects
 Important notes:
 
 - `DISCORD_BOT_TOKEN` is the token from your Discord application.
-- `DISCORD_PREFIX` controls the prefix for legacy commands such as `!code`; it defaults to `!`.
+- `DISCORD_PREFIX` is the default prefix for legacy commands when no saved custom prefix exists; it defaults to `!`.
+- `!prefix <prefix>` saves a custom prefix in `data/config.json`, which is created automatically and ignored by Git.
+- The active custom prefix persists across bot restarts and takes priority over `DISCORD_PREFIX`.
+- `!` is always available as a permanent fallback, even when a custom prefix is active.
+- For example, after `!prefix ?`, both `?code hello` and `!code hello` work.
 - `DISCORD_GUILD_ID` is optional; when set, slash commands register faster in that guild.
 - `ALLOWED_USER_IDS` restricts access to the approved Discord user IDs.
 - `OPENCODE_URL` must point to the running OpenCode server.

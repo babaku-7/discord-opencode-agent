@@ -3,3 +3,5 @@ dist/
 .env
 .env.*
 !.env.example
+data/config.json
+data/config.json.tmp

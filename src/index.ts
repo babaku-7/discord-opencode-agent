@@ -1,5 +1,17 @@
-import { ActionRowBuilder, Client, GatewayIntentBits, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle, type ChatInputCommandInteraction } from 'discord.js';
-import { config, getCommandPrefix, setCommandPrefix } from './config.js';
+import {
+  ActionRowBuilder,
+  Client,
+  GatewayIntentBits,
+  MessageFlags,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  type ButtonInteraction,
+  type ChatInputCommandInteraction,
+  type InteractionDeferReplyOptions,
+  type ModalSubmitInteraction,
+} from 'discord.js';
+import { config, getCommandPrefix, getCommandPrefixes, setCommandPrefix } from './config.js';
 import { OpenCodeClient } from './opencode/client.js';
 import { handleCodeCommand } from './commands/code.js';
 import { handleModelCommand } from './commands/model.js';
@@ -42,8 +54,7 @@ function buildReplyModal(sessionKey: string): ModalBuilder {
     .addComponents(row);
 }
 
-async function handleReplyButton(interaction: any): Promise<void> {
-  if (!interaction.isButton()) return;
+async function handleReplyButton(interaction: ButtonInteraction): Promise<void> {
   if (!interaction.customId.startsWith('opencode_reply:')) return;
 
   if (!config.allowedUsers.has(interaction.user.id)) {
@@ -55,8 +66,7 @@ async function handleReplyButton(interaction: any): Promise<void> {
   await interaction.showModal(buildReplyModal(sessionKey));
 }
 
-async function handleReplyModal(interaction: any): Promise<void> {
-  if (!interaction.isModalSubmit()) return;
+async function handleReplyModal(interaction: ModalSubmitInteraction): Promise<void> {
   if (!interaction.customId.startsWith('opencode_reply_modal:')) return;
 
   if (!config.allowedUsers.has(interaction.user.id)) {
@@ -82,12 +92,14 @@ async function handleReplyModal(interaction: any): Promise<void> {
     return;
   }
 
-  await interaction.deferReply({ flags: MessageFlags.IsComponentsV2 as any });
+  await interaction.deferReply({
+    flags: MessageFlags.IsComponentsV2 as InteractionDeferReplyOptions['flags'],
+  });
   await handleCodeCommand(
     {
       channel: interaction.channel,
       guildId: interaction.guildId,
-      channelId: interaction.channelId,
+      channelId: interaction.channel.id,
       author: interaction.user,
       edit: interaction.editReply.bind(interaction),
     },
@@ -132,8 +144,8 @@ client.on('messageCreate', async (message) => {
   try {
     if (message.author.bot) return;
     const content = message.content.trim();
-    const prefix = getCommandPrefix();
-    if (!content.startsWith(prefix)) return;
+    const prefix = getCommandPrefixes().find((candidate) => content.startsWith(candidate));
+    if (!prefix) return;
     if (!isAuthorized(message, config.allowedUsers)) {
       await message.reply(
         componentsV2Payload([
@@ -185,7 +197,7 @@ client.on('messageCreate', async (message) => {
         await handleAbortCommand(message, openCode);
         break;
       case 'help':
-        await handleHelpCommand(message, prefix);
+        await handleHelpCommand(message, getCommandPrefix());
         break;
       case 'prefix': {
         const nextPrefix = args.trim();
@@ -202,7 +214,19 @@ client.on('messageCreate', async (message) => {
           return;
         }
 
-        setCommandPrefix(nextPrefix);
+        if (!setCommandPrefix(nextPrefix)) {
+          await message.reply(
+            componentsV2Payload([
+              buildAgentContainer({
+                title: '## OpenCode Agent',
+                content: 'Prefix gagal disimpan. Prefix aktif tidak berubah.',
+                status: 'Failed',
+              }),
+            ]),
+          );
+          return;
+        }
+
         await message.reply(
           componentsV2Payload([
             buildAgentContainer({
